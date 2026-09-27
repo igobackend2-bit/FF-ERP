@@ -72,6 +72,15 @@ export async function parseSalesOrdersFromPDF(file: File): Promise<ParsedSalesOr
       const prev = results[results.length - 1];
       prev.items.push(...items);
       prev.parsedTotal += items.reduce((s, i) => s + i.amount, 0);
+      // Sub Total / Total only print on the LAST page of a multi-page order --
+      // earlier pages have neither, so prev.declaredTotal is still null at
+      // this point. This continuation page's total (when present) is the
+      // authoritative one for the whole merged order and must overwrite that,
+      // not be discarded -- otherwise the caller falls back to parsedTotal
+      // and silently drops anything only the final page's Total line carries
+      // (e.g. shipping charges added after the item list).
+      if (totalMatch) prev.declaredTotal = parseAmount(totalMatch[1]);
+      else if (subTotalMatch) prev.declaredTotal = parseAmount(subTotalMatch[1]);
       continue;
     }
 

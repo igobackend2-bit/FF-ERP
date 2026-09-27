@@ -75,7 +75,14 @@ export async function extractPageLines(page: any): Promise<Line[]> {
 
 export function parseItemRows(lines: Line[]): ParsedPOItem[] {
   const items: ParsedPOItem[] = [];
-  let expectedIdx = 1;
+  // On a multi-page order/bill, a continuation page's items keep numbering
+  // from where the previous page left off (17, 18, 19...), not restart at 1
+  // -- this function is called once per page, so it can't assume the first
+  // row is always "1". expectedIdx starts unset and locks onto whatever
+  // number the first matching row actually has, then requires every row
+  // after that to be sequential -- same protection against stray numbers in
+  // item text, just not hardcoded to a page-1 start.
+  let expectedIdx: number | null = null;
   let current: { idx: number; text: string } | null = null;
 
   const flush = () => {
@@ -137,10 +144,11 @@ export function parseItemRows(lines: Line[]): ParsedPOItem[] {
 
   for (const line of lines) {
     const m = line.text.match(/^(\d{1,2})\s+(.*)/);
-    if (m && parseInt(m[1], 10) === expectedIdx) {
+    const rowNum = m ? parseInt(m[1], 10) : null;
+    if (rowNum !== null && (expectedIdx === null ? true : rowNum === expectedIdx)) {
       flush();
-      current = { idx: expectedIdx, text: line.text };
-      expectedIdx++;
+      current = { idx: rowNum, text: line.text };
+      expectedIdx = rowNum + 1;
     } else if (current && !/^(sub\s*total|total|authorized signature)/i.test(line.text)) {
       current.text += ' ' + line.text;
     } else if (/^(sub\s*total|total|authorized signature)/i.test(line.text)) {
@@ -190,6 +198,27 @@ export async function parsePOsFromPDF(file: File): Promise<ParsedPO[]> {
 
     const items = parseItemRows(lines);
     if (!items.length) continue; // skip pages that aren't a PO (e.g. blank/cover pages)
+
+    // A multi-page bill/PO repeats the item table on its continuation pages
+    // but never the Bill From/Vendor Address block -- that page has real
+    // items and no vendor label at all (findVendorName returns undefined), as
+    // opposed to a label that's present but genuinely blank. Merge those rows
+    // into the previous PO instead of creating a second, vendor-less phantom
+    // entry for what is really one PO split across pages (see
+    // salesOrderImportParser.ts, which has the same continuation-page shape
+    // and had this exact bug -- a multi-page sales order silently lost every
+    // item after the first page).
+    if (!vendorMatch && results.length > 0) {
+      const prev = results[results.length - 1];
+      prev.items.push(...items);
+      prev.parsedTotal += items.reduce((s, i) => s + i.amount, 0);
+      // Sub Total / Total only print on the LAST page -- this continuation
+      // page's total (when present) is the authoritative one for the whole
+      // merged PO and must overwrite the earlier page's null, not be dropped.
+      if (totalMatch) prev.declaredTotal = parseAmount(totalMatch[1]);
+      else if (subTotalMatch) prev.declaredTotal = parseAmount(subTotalMatch[1]);
+      continue;
+    }
 
     results.push({
       sourceRef:     poMatch?.[1] ?? `page-${p}`,
