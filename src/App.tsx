@@ -95,6 +95,7 @@ const FFOperationsHomePage = lazy(() => import('./pages/ff-operations/FFOperatio
 const ItemsPage             = lazy(() => import('./pages/ff-operations/items/ItemsPage'));
 const SmartInventoryPage   = lazy(() => import('./pages/ff-operations/inventory/SmartInventoryPage'));
 const GMOperationsDashboard = lazy(() => import('./pages/ff-operations/gm/GMOperationsDashboard'));
+const DayKPIsPage           = lazy(() => import('./pages/ff-operations/DayKPIsPage'));
 const EODPOEngine           = lazy(() => import('./pages/ff-operations/po-engine/EODPOEngine'));
 
 // ── Phase 3: New FF ERP Pages ────────────────────────────────
@@ -919,6 +920,7 @@ const AppRoutes = () => {
       <Route path="/ff-operations/items" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><ItemsPage /></ProtectedRoute>} />
       <Route path="/ff-operations/inventory" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'ff_operations_manager', 'gm', 'hub_manager']}><SmartInventoryPage /></ProtectedRoute>} />
       <Route path="/ff-operations/gm-dashboard" element={<ProtectedRoute allowedRoles={['admin', 'ff_operations_manager', 'gm', 'ceo', 'l1_manager']}><GMOperationsDashboard /></ProtectedRoute>} />
+      <Route path="/ff-operations/day-kpis" element={<ProtectedRoute allowedRoles={['admin', 'ff_operations_manager', 'gm', 'ceo']}><DayKPIsPage /></ProtectedRoute>} />
       <Route path="/ff-operations/eod-po-engine" element={<ProtectedRoute allowedRoles={['admin', 'ff_operations_manager', 'gm', 'purchase_manager', 'purchase_head', 'field_executive', 'bde', 'tele_caller', 'back_office', 'hub_manager']}><EODPOEngine /></ProtectedRoute>} />
 
       {/* ── FF Phase 3 Pages ── */}
