@@ -549,6 +549,11 @@ export default function OrderListPage() {
                         <span className="font-bold text-[#2C64E3] text-xs">
                           #{order.order_number}
                         </span>
+                        {order.hub_name && (
+                          <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5">
+                            <MapPin className="h-2.5 w-2.5" />{order.hub_name}
+                          </div>
+                        )}
                       </td>
 
                       {/* Customer */}
