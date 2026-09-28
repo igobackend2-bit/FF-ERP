@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import {
   ArrowLeft, Download, FileText, Search, RefreshCw,
   ChevronDown, ChevronUp, ChevronsUpDown, Package,
-  TrendingUp, ShoppingBag, CheckCircle2, Pencil, Building2, Banknote, Loader2, Trash2,
+  TrendingUp, ShoppingBag, CheckCircle2, Pencil, Building2, Banknote, Loader2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
@@ -348,12 +348,6 @@ export default function PurchaseReportPage() {
   const [hubFilter, setHubFilter]       = useState('all');
   const [expandedPO, setExpandedPO]     = useState<string | null>(null);
   const [downloading, setDownloading]   = useState(false);
-  const [selectedPOs, setSelectedPOs]   = useState<Set<string>>(new Set());
-  const [deleting, setDeleting]         = useState(false);
-  // Deleting a PO is destructive and only offered to roles that manage
-  // purchasing directly — everyone else on this broadly-shared report page
-  // still sees the data, just not the checkboxes/delete button.
-  const canDelete = ['admin', 'gm', 'ceo', 'ff_operations_manager'].includes(userRole);
 
   const { data: allPOs = [] } = useQuery<StoredPO[]>({
     queryKey: ['purchase-report-pos'],
@@ -492,67 +486,6 @@ export default function PurchaseReportPage() {
     pending:    filtered.filter(p => p.status === 'pending_approval').length,
   }), [filtered]);
 
-  // ── Select & Delete PO(s) ─────────────────────────────────────────────────
-  // A PO whose vendor payment is already 'paid' can't be selected at all —
-  // deleting it would orphan a real, already-disbursed payment record (the
-  // same failure mode as the MS. AK MANI ₹8,300 orphan found & cleaned up
-  // separately). Anything not yet paid is fair game: deleting the PO also
-  // removes its (unpaid) payment and line items so nothing dangles behind.
-  //
-  // Also locked: a PO that's part of a multi-PO Vendor Bulk Payment
-  // (poCount > 1). deleteSelected below deletes the PO's payment via
-  // `.in('purchase_order_id', ids)`, which only matches the legacy
-  // singular column — a bulk payment covering several POs is stored with
-  // that column NULL, so it would never be deleted alongside the PO. That
-  // means naively allowing this would silently leave the bulk payment
-  // referencing a PO that no longer exists, still billing the vendor for a
-  // day whose PO was just deleted. A single-PO bulk payment (poCount === 1,
-  // still populates purchase_order_id for exactly this reason) behaves like
-  // any other unpaid payment and can still be deleted along with its PO.
-  const isPOLocked = (po: StoredPO) => {
-    const p = paymentByPO[po.id];
-    if (!p) return false;
-    if (p.status === 'paid') return true;
-    if (p.poCount > 1) return true;
-    return false;
-  };
-  const selectableFiltered = filtered.filter(po => !isPOLocked(po));
-  const toggleSelectAll = () => {
-    if (selectedPOs.size === selectableFiltered.length && selectableFiltered.length > 0) setSelectedPOs(new Set());
-    else setSelectedPOs(new Set(selectableFiltered.map(po => po.id)));
-  };
-  const toggleSelectOne = (id: string) => {
-    setSelectedPOs(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const selectedTotal = filtered.filter(po => selectedPOs.has(po.id)).reduce((s, p) => s + p.total, 0);
-
-  const deleteSelected = async () => {
-    const ids = Array.from(selectedPOs);
-    if (ids.length === 0) return;
-    if (!window.confirm(`Delete ${ids.length} purchase order(s) totaling ₹${fmt(selectedTotal)}?\n\nThis also removes any (unpaid) vendor payment raised against them and their line items. This cannot be undone.`)) return;
-    setDeleting(true);
-    try {
-      const { error: itemsErr } = await supabase.from('purchase_order_items').delete().in('po_id', ids);
-      if (itemsErr) console.error('[PurchaseReportPage] delete items:', itemsErr.message); // non-fatal, PO delete still proceeds
-      const { error: payErr } = await supabase.from('ff_vendor_payments').delete().in('purchase_order_id', ids);
-      if (payErr) console.error('[PurchaseReportPage] delete payments:', payErr.message);
-      const { error } = await supabase.from('purchase_orders').delete().in('id', ids);
-      if (error) throw error;
-      toast.success(`Deleted ${ids.length} purchase order(s)`);
-      setSelectedPOs(new Set());
-      qc.invalidateQueries({ queryKey: ['purchase-report-pos'] });
-      qc.invalidateQueries({ queryKey: ['ff-vendor-payments-by-po'] });
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to delete purchase order(s)');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   // ── Excel Download ──────────────────────────────────────────────────────────
   const downloadXLSX = () => {
     if (filtered.length === 0) { toast.error('No data to export'); return; }
@@ -667,16 +600,6 @@ export default function PurchaseReportPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {canDelete && selectedPOs.size > 0 && (
-            <button
-              onClick={deleteSelected}
-              disabled={deleting}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold shadow-sm transition-colors disabled:opacity-50"
-            >
-              {deleting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              Delete Selected ({selectedPOs.size})
-            </button>
-          )}
           <button
             onClick={downloadXLSX}
             disabled={downloading || filtered.length === 0}
@@ -786,14 +709,6 @@ export default function PurchaseReportPage() {
             <table className="w-full min-w-[1500px] text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {canDelete && (
-                    <th className="py-3 px-3 w-8">
-                      <input type="checkbox"
-                        checked={selectableFiltered.length > 0 && selectedPOs.size === selectableFiltered.length}
-                        onChange={toggleSelectAll}
-                        title="Select all (deletable) POs" />
-                    </th>
-                  )}
                   <th className="py-3 px-3 w-8"></th>
                   <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">PO Number</th>
                   <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Vendor</th>
@@ -821,20 +736,6 @@ export default function PurchaseReportPage() {
                         onClick={() => setExpandedPO(isExpanded ? null : po.id)}
                         className={`hover:bg-gray-50 transition-colors cursor-pointer ${isExpanded ? 'bg-blue-50/30' : ''}`}
                       >
-                        {/* Select checkbox */}
-                        {canDelete && (
-                          <td className="py-3 px-3" onClick={e => e.stopPropagation()}>
-                            <input type="checkbox"
-                              checked={selectedPOs.has(po.id)}
-                              disabled={isPOLocked(po)}
-                              onChange={() => toggleSelectOne(po.id)}
-                              title={
-                                paymentByPO[po.id]?.status === 'paid' ? 'Already paid — cannot delete'
-                                : (paymentByPO[po.id]?.poCount ?? 0) > 1 ? 'Part of a Vendor Bulk Payment covering several POs — cannot delete individually'
-                                : 'Select for delete'
-                              } />
-                          </td>
-                        )}
                         {/* Expand toggle */}
                         <td className="py-3 px-3 text-gray-400">
                           {po.items.length > 0
