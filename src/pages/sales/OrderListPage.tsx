@@ -222,7 +222,17 @@ export default function OrderListPage() {
   const [customTo, setCustomTo]       = useState('');
   const [minAmount, setMinAmount]     = useState('');
   const [maxAmount, setMaxAmount]     = useState('');
+  const [hubFilter, setHubFilter]     = useState<string>('all');
   const [expandedId, setExpandedId]   = useState<string | null>(null);
+
+  const { data: hubs = [] } = useQuery({
+    queryKey: ['hubs-list'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('hubs').select('id, name').order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const handleRepeat = (orderId: string) =>
     navigate(`/sales/new-order?repeat_order_id=${orderId}`);
@@ -230,14 +240,14 @@ export default function OrderListPage() {
   const range = getDateRange(dateRange, customFrom, customTo);
 
   const { data: orders = [], isLoading, refetch } = useQuery({
-    queryKey: ['all-sales-orders', dateRange, statusFilter, customFrom, customTo],
+    queryKey: ['all-sales-orders', dateRange, statusFilter, customFrom, customTo, hubFilter],
     queryFn: async () => {
       let q = supabase
         .from('sales_orders')
         .select(`
           id, order_number, status, net_amount, total_amount,
           payment_mode, payment_status, order_date, created_at, source,
-          customer_name, customer_phone, delivery_address,
+          customer_name, customer_phone, delivery_address, hub_id, hub_name,
           customer:customers(shop_name, name, first_name, last_name, phone, mobile, area)
         `)
         .order('created_at', { ascending: false })
@@ -249,6 +259,7 @@ export default function OrderListPage() {
       if (dbStatus !== 'all') q = q.eq('status', dbStatus);
       if (!isManagement && (user as any)?.hub_id)
         q = (q as any).or(`hub_id.eq.${(user as any).hub_id},hub_id.is.null`);
+      if (hubFilter !== 'all') q = q.eq('hub_id', hubFilter);
 
       const { data, error } = await q;
       if (error) throw error;
@@ -283,7 +294,7 @@ export default function OrderListPage() {
 
   const totalValue = filtered.reduce((s: number, o: any) => s + (Number(o.net_amount ?? o.total_amount) || 0), 0);
 
-  const hasActiveFilters = minAmount || maxAmount || (dateRange === 'custom' && (customFrom || customTo));
+  const hasActiveFilters = minAmount || maxAmount || hubFilter !== 'all' || (dateRange === 'custom' && (customFrom || customTo));
 
   const clearPriceFilter = () => { setMinAmount(''); setMaxAmount(''); };
 
@@ -359,6 +370,22 @@ export default function OrderListPage() {
                 className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           )}
+
+          {/* Divider */}
+          <div className="h-6 w-px bg-slate-200 hidden md:block" />
+
+          {/* Hub filter */}
+          <div className="flex items-center gap-2">
+            <MapPin className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+            <select
+              value={hubFilter}
+              onChange={e => setHubFilter(e.target.value)}
+              className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="all">All Hubs</option>
+              {(hubs as any[]).map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+            </select>
+          </div>
 
           {/* Divider */}
           <div className="h-6 w-px bg-slate-200 hidden md:block" />
