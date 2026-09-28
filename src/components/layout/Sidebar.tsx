@@ -83,6 +83,7 @@ import {
   DollarSign,
   RefreshCw,
   ArrowRightLeft,
+  Sunrise,
 } from 'lucide-react';
 
 export interface NavChild {
@@ -435,6 +436,7 @@ export const navigationConfig: NavGroup[] = [
     items: [
       { icon: LayoutDashboard, label: 'Dashboard',                 path: '/admin-dashboard' },
       { icon: BarChart3,       label: 'FF Operations Overview',    path: '/ff-operations/gm-dashboard' },
+      { icon: Sunrise,         label: 'Day Open / Close KPIs',      path: '/ff-operations/day-kpis' },
       { icon: ClipboardList,   label: 'Sales Orders',              path: '/sales/orders' },
       { icon: ShoppingCart,    label: 'Purchase Orders',           path: '/purchase/orders' },
       { icon: PackageCheck,    label: 'QC Overview',               path: '/admin/qc-overview' },
@@ -534,6 +536,7 @@ export const navigationConfig: NavGroup[] = [
     icon: FileBarChart,
     roles: ['ff_operations_manager'],
     items: [
+      { icon: Sunrise,      label: 'Day Open / Close KPIs', path: '/ff-operations/day-kpis' },
       { icon: FileBarChart, label: 'Reports Dashboard',    path: '/reports' },
       { icon: Banknote,     label: 'FF Payments Report',  path: '/reports/ff-payments' },
       { icon: BarChart3,    label: 'Daily Sales',         path: '/reports/sales' },
