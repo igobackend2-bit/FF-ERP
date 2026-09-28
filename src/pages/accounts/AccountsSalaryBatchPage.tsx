@@ -47,7 +47,7 @@ import {
 } from '@/modules/hr-payroll/services/salaryBatchWorkflowService';
 import { SALARY_BATCH_STATUS, STATUS_BADGE_CLASS } from '@/modules/hr-payroll/lib/salaryBatchWorkflow';
 import { supabase } from '@/integrations/supabase/client';
-import { generateSalaryKotakFile } from '@/lib/kotakBankExport';
+import { generateSalaryKotakFile, parseStatementFile, matchPaymentsWithStatement, type MatchResult } from '@/lib/kotakBankExport';
 
 const fmt = (v: number) =>
   `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -74,6 +74,13 @@ export default function AccountsSalaryBatchPage() {
   const [holdReason, setHoldReason] = useState('');
   const [employees, setEmployees] = useState<BatchEmployeeRow[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
+
+  // Bulk statement upload (match bank-returned UTRs against this batch's employees)
+  const [bulkBatch, setBulkBatch] = useState<SalaryBatchCard | null>(null);
+  const [bulkEmployees, setBulkEmployees] = useState<BatchEmployeeRow[]>([]);
+  const [bulkMatches, setBulkMatches] = useState<MatchResult[] | null>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const { data: batches = [], isLoading } = useQuery({
     queryKey: ['salary-batches-accounts'],
@@ -167,6 +174,59 @@ export default function AccountsSalaryBatchPage() {
     } catch (error) {
       console.error('Failed to generate Kotak file:', error);
       toast.error('Failed to generate Kotak file');
+    }
+  };
+
+  const openBulkDialog = async (batch: SalaryBatchCard) => {
+    setBulkBatch(batch);
+    setBulkMatches(null);
+    try {
+      const list = await fetchBatchEmployees(batch.id);
+      setBulkEmployees(list);
+    } catch (e) {
+      toast.error('Failed to load employees for this batch');
+      setBulkEmployees([]);
+    }
+  };
+
+  const handleBulkStatementFile = async (file: File) => {
+    setBulkUploading(true);
+    try {
+      const rows = await parseStatementFile(file);
+      const forExport = bulkEmployees.map((e) => ({
+        id: e.id,
+        amount: Number(e.net_pay ?? 0),
+        vendor_name: e.employee_name ?? 'Unknown',
+        vendor_account_number: e.account_number ?? undefined,
+      }));
+      const results = matchPaymentsWithStatement(forExport, rows);
+      setBulkMatches(results);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to read statement');
+    } finally {
+      setBulkUploading(false);
+    }
+  };
+
+  const confirmBulkMatches = async () => {
+    if (!bulkMatches) return;
+    setBulkSaving(true);
+    try {
+      const matched = bulkMatches.filter((m) => m.matchedUTR);
+      for (const m of matched) {
+        const { error } = await supabase
+          .from('salary_batch_employees')
+          .update({ utr_number: m.matchedUTR, updated_at: new Date().toISOString() })
+          .eq('id', m.paymentId);
+        if (error) throw error;
+      }
+      toast.success(`${matched.length} of ${bulkMatches.length} employee(s) matched and saved`);
+      setBulkBatch(null);
+      setBulkMatches(null);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to save matched UTRs');
+    } finally {
+      setBulkSaving(false);
     }
   };
 
@@ -278,7 +338,13 @@ export default function AccountsSalaryBatchPage() {
                         <FileCheck className="w-3 h-3 mr-1" />
                         Kotak File
                       </Button>
-                      <Button variant="outline" size="sm" disabled title="Coming soon">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openBulkDialog(batch)}
+                        disabled={batch.total_employees === 0}
+                        title="Upload the bank's returned statement to match UTRs against employees"
+                      >
                         <Upload className="w-3 h-3 mr-1" />
                         Bulk file
                       </Button>
@@ -399,6 +465,75 @@ export default function AccountsSalaryBatchPage() {
             >
               {holdMutation.isPending ? 'Saving…' : 'Mark Hold'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk file — upload bank statement, match UTRs against employees */}
+      <Dialog open={!!bulkBatch} onOpenChange={(open) => { if (!open) { setBulkBatch(null); setBulkMatches(null); } }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bulk file — match UTRs</DialogTitle>
+            <DialogDescription>
+              Upload the bank's returned statement for {bulkBatch?.batch_code}. Employees are matched by amount, account number and name, the same way vendor payment batches are matched.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!bulkMatches ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">{bulkEmployees.length} employee(s) in this batch.</p>
+              <label className="flex items-center justify-center gap-2 px-4 py-6 rounded-lg border-2 border-dashed border-muted-foreground/30 text-sm font-medium cursor-pointer hover:bg-muted/30">
+                {bulkUploading ? 'Reading statement…' : 'Choose bank statement (.xlsx, .xls, .csv, .pdf)'}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.pdf"
+                  className="hidden"
+                  disabled={bulkUploading}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBulkStatementFile(f); e.target.value = ''; }}
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-muted-foreground">
+                {bulkMatches.filter((m) => m.status === 'matched').length}/{bulkMatches.length} matched confidently
+              </p>
+              <div className="border rounded-md overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Matched UTR</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bulkMatches.map((m) => (
+                      <TableRow key={m.paymentId}>
+                        <TableCell>{m.vendorName}</TableCell>
+                        <TableCell className="text-right font-mono">{fmt(m.amount)}</TableCell>
+                        <TableCell className="font-mono text-xs">{m.matchedUTR || '—'}</TableCell>
+                        <TableCell>
+                          <Badge variant={m.status === 'matched' ? 'default' : m.status === 'partial' ? 'secondary' : 'outline'}>
+                            {m.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setBulkBatch(null); setBulkMatches(null); }}>Cancel</Button>
+            {bulkMatches && (
+              <Button onClick={confirmBulkMatches} disabled={bulkSaving}>
+                {bulkSaving ? 'Saving…' : 'Save matched UTRs'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
