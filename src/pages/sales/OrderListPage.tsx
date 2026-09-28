@@ -561,14 +561,21 @@ export default function OrderListPage() {
                         </div>
                       </td>
 
-                      {/* Date & Time */}
+                      {/* Date & Time — order_date alongside created_at, same "label: date" pattern as the Purchase Report's PO/Delivery Date column */}
                       <td>
-                        {createdAt ? (
+                        {createdAt || order.order_date ? (
                           <div>
-                            <div className="text-xs text-slate-700">{format(createdAt, 'd MMM yyyy')}</div>
-                            <div className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                              <Clock className="h-2.5 w-2.5" />{format(createdAt, 'h:mm a')}
-                            </div>
+                            {order.order_date && (
+                              <div className="text-xs text-slate-700">
+                                <span className="text-slate-400">Order:</span> {format(new Date(order.order_date), 'd MMM yyyy')}
+                              </div>
+                            )}
+                            {createdAt && (
+                              <div className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                                <Clock className="h-2.5 w-2.5" />
+                                {order.order_date ? 'Created ' : ''}{format(createdAt, order.order_date ? 'd MMM, h:mm a' : 'd MMM yyyy, h:mm a')}
+                              </div>
+                            )}
                           </div>
                         ) : '—'}
                       </td>
