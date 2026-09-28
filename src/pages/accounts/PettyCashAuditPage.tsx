@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { exportToCSV } from '@/lib/exportUtils';
 
 const PettyCashAuditPage = () => {
     const { user } = useAuth();
@@ -117,6 +118,19 @@ const PettyCashAuditPage = () => {
         return Object.values(totals).sort((a, b) => b.date.localeCompare(a.date));
     }, [filteredEntries]);
 
+    const handleExportReport = () => {
+        exportToCSV(
+            filteredEntries,
+            `petty-cash-ledger-${format(dateRange.from, 'yyyyMMdd')}-${format(dateRange.to, 'yyyyMMdd')}`,
+            [
+                { key: 'expense_date', label: 'Date' },
+                { key: 'vendor_name', label: 'Vendor' },
+                { key: 'department', label: 'Department' },
+                { key: 'amount', label: 'Amount' },
+            ]
+        );
+    };
+
     return (
         <div className="p-6 space-y-6">
             <div className="flex justify-between items-center">
@@ -125,7 +139,7 @@ const PettyCashAuditPage = () => {
                     <p className="text-muted-foreground">Detailed visibility into daily expenditures and running balance</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" className="gap-2">
+                    <Button variant="outline" className="gap-2" onClick={handleExportReport} disabled={filteredEntries.length === 0}>
                         <Download className="w-4 h-4" /> Export Report
                     </Button>
                 </div>

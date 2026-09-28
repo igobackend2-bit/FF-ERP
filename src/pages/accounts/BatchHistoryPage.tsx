@@ -46,7 +46,7 @@ export default function BatchHistoryPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ff_vendor_payments')
-        .select('id, batch_id, hub_id, gross_amount, net_amount, utr_number, paid_at, vendors(name), hubs(name), purchase_orders(po_number, eod_date)')
+        .select('id, batch_id, hub_id, gross_amount, net_amount, utr_number, paid_at, is_bulk, po_breakdown, vendors(name), hubs(name), purchase_orders(po_number, eod_date)')
         .eq('payment_status', 'paid')
         .not('batch_id', 'is', null)
         .order('paid_at', { ascending: false });
@@ -58,8 +58,19 @@ export default function BatchHistoryPage() {
   const isLoading = batchesLoading || paymentsLoading;
   const filtersActive = hubFilter !== 'all' || !!dateFrom || !!dateTo;
 
+  // A Vendor Bulk Payment (is_bulk) has purchase_order_id = NULL, so its
+  // purchase_orders embed is always null and it has no single eod_date --
+  // filtering by that column alone silently drops every bulk payment the
+  // moment a date range is set. Its real date range lives in po_breakdown
+  // instead; a bulk payment matches the filter if ANY of its covered days
+  // falls inside it (same rule ExecutionDeskPage's Batch Creation tab uses).
   const matchesFilter = (p: any) => {
     if (hubFilter !== 'all' && p.hub_id !== hubFilter) return false;
+    if (p.is_bulk) {
+      if (!dateFrom && !dateTo) return true;
+      const dates: string[] = (p.po_breakdown ?? []).map((b: any) => b.po_date);
+      return dates.some((d: string) => (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo));
+    }
     const eod = p.purchase_orders?.eod_date;
     if (dateFrom && (!eod || eod < dateFrom)) return false;
     if (dateTo && (!eod || eod > dateTo)) return false;
@@ -143,15 +154,25 @@ export default function BatchHistoryPage() {
                     <tr className="text-gray-400"><th className="text-left font-medium py-1.5 px-4">Vendor</th><th className="text-left font-medium py-1.5">Hub</th><th className="text-left font-medium py-1.5">PO</th><th className="text-right font-medium py-1.5">Amount</th><th className="text-left font-medium py-1.5 px-4">UTR</th></tr>
                   </thead>
                   <tbody>
-                    {payments.map((p: any) => (
-                      <tr key={p.id} className="border-t border-gray-50">
-                        <td className="py-1.5 px-4">{p.vendors?.name || '—'}</td>
-                        <td className="py-1.5">{p.hubs?.name || '—'}</td>
-                        <td className="py-1.5">{p.purchase_orders?.po_number || '—'} {p.purchase_orders?.eod_date && `(${format(new Date(p.purchase_orders.eod_date), 'dd MMM')})`}</td>
-                        <td className="py-1.5 text-right font-semibold">{fmt(p.net_amount ?? p.gross_amount)}</td>
-                        <td className="py-1.5 px-4 font-mono">{p.utr_number || '—'}</td>
-                      </tr>
-                    ))}
+                    {payments.map((p: any) => {
+                      const bulkDates = (p.po_breakdown ?? []).map((b: any) => b.po_date).filter(Boolean).sort();
+                      const bulkDateRange = bulkDates.length
+                        ? (bulkDates[0] === bulkDates[bulkDates.length - 1] ? bulkDates[0] : `${bulkDates[0]} → ${bulkDates[bulkDates.length - 1]}`)
+                        : '';
+                      return (
+                        <tr key={p.id} className="border-t border-gray-50">
+                          <td className="py-1.5 px-4">{p.vendors?.name || '—'}</td>
+                          <td className="py-1.5">{p.hubs?.name || '—'}</td>
+                          <td className="py-1.5">
+                            {p.is_bulk
+                              ? <>🔗 Bulk · {p.po_breakdown?.length ?? '?'} POs{bulkDateRange && ` (${bulkDateRange})`}</>
+                              : <>{p.purchase_orders?.po_number || '—'} {p.purchase_orders?.eod_date && `(${format(new Date(p.purchase_orders.eod_date), 'dd MMM')})`}</>}
+                          </td>
+                          <td className="py-1.5 text-right font-semibold">{fmt(p.net_amount ?? p.gross_amount)}</td>
+                          <td className="py-1.5 px-4 font-mono">{p.utr_number || '—'}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
