@@ -10,6 +10,7 @@
 //  = what actually happened today, plus what's unresolved and rolling into
 //  tomorrow. Both sections sit on one page — no time-of-day switching.
 // ─────────────────────────────────────────────────────────────
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -17,7 +18,7 @@ import { AnalyticsMetricCard } from '@/components/analytics/AnalyticsMetricCard'
 import {
   Sunrise, Sunset, ShoppingCart, FileText, AlertTriangle, Banknote, Clock,
   Boxes, PackageX, ShoppingBag, CheckCircle2, FileBarChart, Wallet, Truck,
-  RefreshCw,
+  RefreshCw, Calendar,
 } from 'lucide-react';
 
 const TODAY = format(new Date(), 'yyyy-MM-dd');
@@ -27,14 +28,14 @@ const inr = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN', { maxi
 
 // ── Day Open queries ────────────────────────────────────────────
 
-function useTodayOrders() {
+function useTodayOrders(date: string) {
   return useQuery({
-    queryKey: ['day-kpis-orders-today'],
+    queryKey: ['day-kpis-orders-today', date],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('sales_orders')
         .select('id, total_amount', { count: 'exact' })
-        .eq('order_date', TODAY)
+        .eq('order_date', date)
         .neq('status', 'cancelled');
       if (error) throw error;
       const revenue = (data ?? []).reduce((s, r: any) => s + Number(r.total_amount ?? 0), 0);
@@ -43,16 +44,16 @@ function useTodayOrders() {
   });
 }
 
-// Today's EOD-generated POs — also the source data for the "zero buying
-// activity" backlog callout below, so it's fetched once and used twice.
-function useOvernightPOs() {
+// That date's EOD-generated POs — also the source data for the "zero
+// buying activity" backlog callout below, so it's fetched once and used twice.
+function useOvernightPOs(date: string) {
   return useQuery({
-    queryKey: ['day-kpis-pos-overnight'],
+    queryKey: ['day-kpis-pos-overnight', date],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('purchase_orders')
         .select('id, po_number, hub_name, total_amount')
-        .eq('eod_date', TODAY);
+        .eq('eod_date', date);
       if (error) throw error;
       const rows = data ?? [];
       return { count: rows.length, total: rows.reduce((s, r: any) => s + Number(r.total_amount ?? 0), 0), rows };
@@ -163,14 +164,15 @@ function useWarehouseBacklog() {
 
 // ── Day Close queries ───────────────────────────────────────────
 
-function useBuysToday() {
+function useBuysToday(date: string) {
   return useQuery({
-    queryKey: ['day-kpis-buys-today'],
+    queryKey: ['day-kpis-buys-today', date],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('purchase_entries')
         .select('id, total_amount')
-        .gte('created_at', `${TODAY}T00:00:00`);
+        .gte('created_at', `${date}T00:00:00`)
+        .lt('created_at', `${date}T23:59:59.999`);
       if (error) throw error;
       const rows = data ?? [];
       return { count: rows.length, total: rows.reduce((s, r: any) => s + Number(r.total_amount ?? 0), 0) };
@@ -178,13 +180,13 @@ function useBuysToday() {
   });
 }
 
-function usePaymentsPaidToday() {
+function usePaymentsPaidToday(date: string) {
   return useQuery({
-    queryKey: ['day-kpis-payments-paid-today'],
+    queryKey: ['day-kpis-payments-paid-today', date],
     queryFn: async () => {
       const [vendorRes, transportRes] = await Promise.all([
-        supabase.from('ff_vendor_payments').select('id, net_amount, gross_amount').eq('payment_status', 'paid').gte('paid_at', `${TODAY}T00:00:00`),
-        supabase.from('ff_transport_payments').select('id, total_amount').eq('payment_status', 'paid').gte('paid_at', `${TODAY}T00:00:00`),
+        supabase.from('ff_vendor_payments').select('id, net_amount, gross_amount').eq('payment_status', 'paid').gte('paid_at', `${date}T00:00:00`).lt('paid_at', `${date}T23:59:59.999`),
+        supabase.from('ff_transport_payments').select('id, total_amount').eq('payment_status', 'paid').gte('paid_at', `${date}T00:00:00`).lt('paid_at', `${date}T23:59:59.999`),
       ]);
       const vendorRows = vendorRes.data ?? [];
       const transportRows = transportRes.data ?? [];
@@ -195,27 +197,27 @@ function usePaymentsPaidToday() {
   });
 }
 
-function useReceivingToday() {
+function useReceivingToday(date: string) {
   return useQuery({
-    queryKey: ['day-kpis-receiving-today'],
+    queryKey: ['day-kpis-receiving-today', date],
     queryFn: async () => {
       const [transitRes, qcRes] = await Promise.all([
-        supabase.from('transit_records').select('id', { count: 'exact', head: true }).gte('created_at', `${TODAY}T00:00:00`),
-        supabase.from('qc_inspections').select('id', { count: 'exact', head: true }).gte('created_at', `${TODAY}T00:00:00`),
+        supabase.from('transit_records').select('id', { count: 'exact', head: true }).gte('created_at', `${date}T00:00:00`).lt('created_at', `${date}T23:59:59.999`),
+        supabase.from('qc_inspections').select('id', { count: 'exact', head: true }).gte('created_at', `${date}T00:00:00`).lt('created_at', `${date}T23:59:59.999`),
       ]);
       return { transitCount: transitRes.count ?? 0, qcCount: qcRes.count ?? 0 };
     },
   });
 }
 
-function useCashCollectedToday() {
+function useCashCollectedToday(date: string) {
   return useQuery({
-    queryKey: ['day-kpis-cash-collected-today'],
+    queryKey: ['day-kpis-cash-collected-today', date],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('cash_collections')
         .select('amount')
-        .eq('collection_date', TODAY)
+        .eq('collection_date', date)
         .eq('status', 'verified');
       if (error) throw error;
       return { total: (data ?? []).reduce((s, r: any) => s + Number(r.amount ?? 0), 0) };
@@ -223,14 +225,14 @@ function useCashCollectedToday() {
   });
 }
 
-function useVouchersToday() {
+function useVouchersToday(date: string) {
   return useQuery({
-    queryKey: ['day-kpis-vouchers-today'],
+    queryKey: ['day-kpis-vouchers-today', date],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('acct_vouchers')
         .select('id, total_debit')
-        .eq('posting_date', TODAY)
+        .eq('posting_date', date)
         .eq('status', 'posted');
       if (error) throw error;
       const rows = data ?? [];
@@ -289,18 +291,24 @@ function BacklogPanel({ title, rows, renderRow, viewAllHref, viewAllLabel }: {
 }
 
 export default function DayKPIsPage() {
-  const ordersToday = useTodayOrders();
-  const overnightPOs = useOvernightPOs();
+  const [selectedDate, setSelectedDate] = useState(TODAY);
+  const isToday = selectedDate === TODAY;
+
+  const ordersToday = useTodayOrders(selectedDate);
+  const overnightPOs = useOvernightPOs(selectedDate);
+  // These four are always a live, right-now snapshot — there's no historical
+  // record of "what the backlog looked like on a past date," so they don't
+  // take the selected date and are labelled as current regardless of it.
   const unassigned = useUnassignedBacklog();
   const paymentQueue = usePaymentQueue();
   const stock = useStockLevels();
   const warehouseBacklog = useWarehouseBacklog();
 
-  const buysToday = useBuysToday();
-  const paymentsPaid = usePaymentsPaidToday();
-  const receivingToday = useReceivingToday();
-  const cashCollected = useCashCollectedToday();
-  const vouchersToday = useVouchersToday();
+  const buysToday = useBuysToday(selectedDate);
+  const paymentsPaid = usePaymentsPaidToday(selectedDate);
+  const receivingToday = useReceivingToday(selectedDate);
+  const cashCollected = useCashCollectedToday(selectedDate);
+  const vouchersToday = useVouchersToday(selectedDate);
   const zeroBuyPOs = useZeroBuyPOs(overnightPOs.data?.rows ?? []);
 
   const anyError = [ordersToday, overnightPOs, unassigned, paymentQueue, stock, warehouseBacklog,
@@ -319,9 +327,26 @@ export default function DayKPIsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Day Open / Day Close KPIs</h1>
-          <p className="text-sm text-muted-foreground">As of {format(new Date(), 'd MMM yyyy, h:mm a')}</p>
+          <p className="text-sm text-muted-foreground">
+            {isToday ? `As of ${format(new Date(), 'd MMM yyyy, h:mm a')}` : `Business date: ${format(new Date(selectedDate), 'd MMM yyyy')}`}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-border bg-card">
+            <Calendar className="w-3.5 h-3.5 text-muted-foreground ml-1" />
+            <input
+              type="date"
+              value={selectedDate}
+              max={TODAY}
+              onChange={e => setSelectedDate(e.target.value || TODAY)}
+              className="bg-transparent text-xs font-semibold outline-none"
+            />
+            {!isToday && (
+              <button onClick={() => setSelectedDate(TODAY)} className="text-xs font-semibold text-primary hover:underline pr-1">
+                Today
+              </button>
+            )}
+          </div>
           <a href="#day-open" className="px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-colors">
             <Sunrise className="w-3.5 h-3.5 inline mr-1" /> Day Open
           </a>
@@ -333,6 +358,13 @@ export default function DayKPIsPage() {
           </button>
         </div>
       </div>
+
+      {!isToday && (
+        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-2.5 text-xs text-indigo-700">
+          Viewing <strong>{format(new Date(selectedDate), 'd MMM yyyy')}</strong>. Orders, POs, buys, payments, receiving, collections and vouchers reflect that date.
+          Unassigned POs, payment queue aging, stock levels and warehouse backlog are always <strong>current, right now</strong> — there's no historical snapshot of those for a past date.
+        </div>
+      )}
 
       {anyError && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive flex items-center justify-between">
