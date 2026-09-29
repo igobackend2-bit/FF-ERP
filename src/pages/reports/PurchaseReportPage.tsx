@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -486,6 +486,42 @@ export default function PurchaseReportPage() {
     pending:    filtered.filter(p => p.status === 'pending_approval').length,
   }), [filtered]);
 
+  // ── Table horizontal scroll: a mirrored scrollbar above the table (so it's
+  // reachable without scrolling all the way down to find the native one first)
+  // plus left/right arrow-key scrolling while the table has focus. ────────────
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const topScrollRef   = useRef<HTMLDivElement>(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
+  const syncingScroll = useRef(false);
+
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    const measure = () => setTableScrollWidth(el.scrollWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [filtered.length]);
+
+  const handleTopScroll = () => {
+    if (syncingScroll.current || !topScrollRef.current || !tableScrollRef.current) return;
+    syncingScroll.current = true;
+    tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    syncingScroll.current = false;
+  };
+  const handleTableScroll = () => {
+    if (syncingScroll.current || !topScrollRef.current || !tableScrollRef.current) return;
+    syncingScroll.current = true;
+    topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+    syncingScroll.current = false;
+  };
+  const handleTableKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!tableScrollRef.current) return;
+    if (e.key === 'ArrowRight') { tableScrollRef.current.scrollBy({ left: 150, behavior: 'smooth' }); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { tableScrollRef.current.scrollBy({ left: -150, behavior: 'smooth' }); e.preventDefault(); }
+  };
+
   // ── Excel Download ──────────────────────────────────────────────────────────
   const downloadXLSX = () => {
     if (filtered.length === 0) { toast.error('No data to export'); return; }
@@ -715,7 +751,26 @@ export default function PurchaseReportPage() {
             <p className="text-xs mt-1">Try clearing the date filter or search</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Mirrored top scrollbar — the real one sits below 1694 rows of table, far out
+                of view, so this gives the same horizontal scroll right at the top. */}
+            <div
+              ref={topScrollRef}
+              onScroll={handleTopScroll}
+              className="overflow-x-auto overflow-y-hidden border-b border-gray-100"
+              style={{ height: 14 }}
+              aria-hidden="true"
+            >
+              <div style={{ width: tableScrollWidth, height: 1 }} />
+            </div>
+            <div
+              ref={tableScrollRef}
+              onScroll={handleTableScroll}
+              onKeyDown={handleTableKeyDown}
+              tabIndex={0}
+              aria-label="Purchase orders table — use the left and right arrow keys to scroll"
+              className="overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-300"
+            >
             <table className="w-full min-w-[1180px] text-xs">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
@@ -895,7 +950,8 @@ export default function PurchaseReportPage() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>
