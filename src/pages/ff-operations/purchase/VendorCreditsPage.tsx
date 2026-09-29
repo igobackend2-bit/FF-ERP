@@ -17,7 +17,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 export default function VendorCreditsPage() {
-  const { needsApproval } = useMakerChecker();
+  const { resolveNeedsApproval } = useMakerChecker();
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -46,6 +46,7 @@ export default function VendorCreditsPage() {
     if (!form.vendor_name || !form.credit_amount || !form.reason) { toast.error('Vendor, amount and reason required'); return; }
     setSaving(true);
     try {
+      const needsApproval = await resolveNeedsApproval();
       const number = `VC-${Date.now()}`;
       const { data: inserted, error } = await (supabase as any).from('vendor_credits').insert({
         credit_note_number: number,

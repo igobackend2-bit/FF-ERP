@@ -75,22 +75,36 @@ async function fetchAll<T>(build: (from: number, to: number) => any, pageSize = 
   return out;
 }
 
+/** Fresh, un-cached read of the Maker-Checker flag — used at the moment of submit so a
+ *  slow-loading settings query can never let a create-action race past the approval gate. */
+export async function fetchMakerCheckerEnabled(): Promise<boolean> {
+  const { data, error } = await supabase.from('acct_settings').select('maker_checker_enabled').eq('id', 1).single();
+  if (error) { console.error('[useAccounts] fetchMakerCheckerEnabled:', error.message); return false; }
+  return !!data?.maker_checker_enabled;
+}
+
 /** Is Maker-Checker on, and can the current user skip straight to posted? Used by the
- *  four document pages (Credit/Debit Notes, Vendor Credits, Sales Invoices) that insert
- *  directly instead of going through the acct_vouchers approval flow. */
+ *  document pages (Credit/Debit Notes, Vendor Credits) that insert directly instead of
+ *  going through the acct_vouchers approval flow.
+ *
+ *  `needsApproval` is for reactive UI only (banners, badges) — it is `undefined` while the
+ *  settings query is still loading. Never gate an actual insert on this value: call
+ *  `resolveNeedsApproval()` at submit time instead, which always does a fresh DB read so a
+ *  slow-loading query can't let a submission race past the approval gate. */
 export function useMakerChecker() {
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['acct', 'settings', 'maker-checker'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('acct_settings').select('maker_checker_enabled').eq('id', 1).single();
-      if (error) throw error;
-      return !!data?.maker_checker_enabled;
-    },
+    queryFn: fetchMakerCheckerEnabled,
     staleTime: 30_000,
   });
   const { canApprove } = useAccountsRole();
-  const enabled = !!data;
-  return { enabled, needsApproval: enabled && !canApprove };
+  const enabled = data === true;
+  return {
+    enabled,
+    isLoading,
+    needsApproval: isLoading ? undefined : enabled && !canApprove,
+    resolveNeedsApproval: async () => !canApprove && (await fetchMakerCheckerEnabled()),
+  };
 }
 
 export function useAccountsRole() {

@@ -28,7 +28,7 @@ const emptyForm = { customer_id: '', customer_name: '', hub_id: '', invoice_refe
 
 export default function CreditNotesPage() {
   const { user } = useAuth();
-  const { needsApproval } = useMakerChecker();
+  const { resolveNeedsApproval } = useMakerChecker();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
@@ -71,6 +71,7 @@ export default function CreditNotesPage() {
     if (!form.customer_id || !form.amount || !form.reason) { toast.error('Select a customer, amount and reason'); return; }
     setSaving(true);
     try {
+      const needsApproval = await resolveNeedsApproval();
       const number = `CN-${Date.now()}`;
       const { data: inserted, error } = await (supabase as any).from('credit_notes').insert({
         credit_note_number: number,

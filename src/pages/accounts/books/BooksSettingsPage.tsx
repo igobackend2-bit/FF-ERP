@@ -7,10 +7,11 @@ import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { Lock, CalendarRange, ShieldCheck, CheckCircle2, XCircle, ListChecks, History, Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   useAcctSettings, useUpdateSettings, useAccountsRole, useAddFiscalYear,
   usePendingVouchers, usePendingDocuments, useAuditLogs, useApproveVoucher, useRejectVoucher,
-  VOUCHER_TYPE_LABEL, inr,
+  logAudit, VOUCHER_TYPE_LABEL, inr,
 } from '@/hooks/useAccounts';
 import { BooksPage, Field, inputCls, LoadState, RefreshButton } from '@/components/accounts/BooksUI';
 import { supabase } from '@/integrations/supabase/client';
@@ -38,14 +39,15 @@ function AddFiscalYearForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-const DOC_TABLE: Record<string, { table: string; approveStatus: string; rejectStatus: string }> = {
-  'Credit Note': { table: 'credit_notes', approveStatus: 'issued', rejectStatus: 'cancelled' },
-  'Debit Note': { table: 'debit_notes', approveStatus: 'issued', rejectStatus: 'cancelled' },
-  'Vendor Credit': { table: 'vendor_credits', approveStatus: 'open', rejectStatus: 'expired' },
-  'Sales Invoice': { table: 'invoices', approveStatus: 'issued', rejectStatus: 'cancelled' },
+const DOC_TABLE: Record<string, { table: string; recordType: string; approveStatus: string; rejectStatus: string }> = {
+  'Credit Note': { table: 'credit_notes', recordType: 'CreditNote', approveStatus: 'issued', rejectStatus: 'cancelled' },
+  'Debit Note': { table: 'debit_notes', recordType: 'DebitNote', approveStatus: 'issued', rejectStatus: 'cancelled' },
+  'Vendor Credit': { table: 'vendor_credits', recordType: 'VendorCredit', approveStatus: 'open', rejectStatus: 'expired' },
+  'Sales Invoice': { table: 'invoices', recordType: 'SalesInvoice', approveStatus: 'issued', rejectStatus: 'cancelled' },
 };
 
 function PendingApprovals() {
+  const { user } = useAuth();
   const { canApprove } = useAccountsRole();
   const vouchersQ = usePendingVouchers();
   const docsQ = usePendingDocuments();
@@ -60,6 +62,7 @@ function PendingApprovals() {
     const { error } = await supabase.from(cfg.table).update({ status: approve ? cfg.approveStatus : cfg.rejectStatus }).eq('id', doc.id);
     setBusy(null);
     if (error) { toast.error(error.message); return; }
+    await logAudit({ record_type: cfg.recordType, record_id: doc.id, action: approve ? 'approved' : 'rejected', performed_by_name: (user as any)?.name, remarks: doc.number });
     toast.success(approve ? `${doc.type} approved` : `${doc.type} rejected`);
     docsQ.refetch();
   };

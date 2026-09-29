@@ -29,7 +29,7 @@ const emptyForm = { vendor_id: '', vendor_name: '', hub_id: '', invoice_referenc
 
 export default function DebitNotesPage() {
   const { user } = useAuth();
-  const { needsApproval } = useMakerChecker();
+  const { resolveNeedsApproval } = useMakerChecker();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
@@ -82,6 +82,7 @@ export default function DebitNotesPage() {
     if (!form.vendor_id || !form.amount || !form.reason || !form.hub_id) { toast.error('Select a vendor, hub, amount and reason'); return; }
     setSaving(true);
     try {
+      const needsApproval = await resolveNeedsApproval();
       const number = `DN-${Date.now()}`;
       const { data: inserted, error } = await (supabase as any).from('debit_notes').insert({
         debit_note_number: number,
