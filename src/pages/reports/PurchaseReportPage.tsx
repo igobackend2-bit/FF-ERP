@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import {
-  ArrowLeft, Download, FileText, Search, RefreshCw,
+  ArrowLeft, ArrowLeftRight, Download, FileText, Search, RefreshCw,
   ChevronDown, ChevronUp, ChevronsUpDown, Package,
   TrendingUp, ShoppingBag, CheckCircle2, Pencil, Building2, Banknote, Loader2,
 } from 'lucide-react';
@@ -672,13 +672,16 @@ export default function PurchaseReportPage() {
           { label: 'Approved POs',      value: stats.approved,                         icon: CheckCircle2, color: 'bg-emerald-50 text-emerald-600' },
           { label: 'Pending Approval',  value: stats.pending,                          icon: ShoppingBag,  color: 'bg-amber-50 text-amber-600' },
         ].map(c => (
-          <div key={c.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+          <div key={c.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 overflow-hidden">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${c.color}`}>
               <c.icon className="w-4 h-4" />
             </div>
-            <div>
-              <p className="text-lg font-black text-gray-900">{c.value}</p>
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{c.label}</p>
+            {/* min-w-0 lets this flex child actually shrink/truncate instead of forcing the
+                card wider than its grid cell — without it, a long value like the currency
+                total pushes straight past the card's right edge. */}
+            <div className="min-w-0">
+              <p className="text-lg font-black text-gray-900 truncate" title={String(c.value)}>{c.value}</p>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider truncate">{c.label}</p>
             </div>
           </div>
         ))}
@@ -695,7 +698,14 @@ export default function PurchaseReportPage() {
               </span>
             )}
           </p>
-          <p className="text-xs text-gray-400">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</p>
+          <div className="flex items-center gap-3">
+            {filtered.length > 0 && (
+              <p className="hidden sm:flex items-center gap-1 text-[11px] text-gray-400">
+                <ArrowLeftRight className="w-3 h-3" /> Scroll for Qty, Amount, Date &amp; Status
+              </p>
+            )}
+            <p className="text-xs text-gray-400">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</p>
+          </div>
         </div>
 
         {filtered.length === 0 ? (
@@ -772,9 +782,11 @@ export default function PurchaseReportPage() {
                           <BankDetailsCell vendor={vendor} vendorName={po.vendorName} onSaved={handleVendorSaved} />
                         </td>
 
-                        {/* Products */}
-                        <td className="py-3 px-3 text-xs text-gray-600 max-w-[160px]">
-                          <p className="truncate">{po.items.map(i => i.itemName).join(', ') || '—'}</p>
+                        {/* Products — full list on hover since the cell truncates long ones */}
+                        <td className="py-3 px-3 text-xs text-gray-600 max-w-[200px]">
+                          <p className="truncate" title={po.items.map(i => i.itemName).join(', ')}>
+                            {po.items.map(i => i.itemName).join(', ') || '—'}
+                          </p>
                         </td>
 
                         {/* Total Qty */}
