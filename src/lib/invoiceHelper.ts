@@ -158,7 +158,12 @@ export async function backfillMissingInvoices(): Promise<{ created: number; fail
 }
 
 /**
- * Fix existing invoices that have total_amount = 0 or missing customer_name.
+ * Fix existing invoices that have total_amount = 0, missing customer_name, or a
+ * customer_name that's actually a stray metadata label, not a real name — seen once
+ * from a legacy bulk import that wrote "Order Date : dd/mm/yyyy" into this column
+ * instead of the customer's name (701 invoices, fixed 2026-09-29). The "Order Date%"
+ * check is kept as a standing filter so "Sync Missing" self-heals if the same import
+ * pattern ever reappears.
  * Recalculates totals from sales_order_items and looks up customer from customers table.
  * Call this after backfillMissingInvoices to repair already-created empty invoices.
  */
@@ -166,11 +171,11 @@ export async function fixZeroAmountInvoices(): Promise<{ fixed: number; failed: 
   let fixed  = 0;
   let failed = 0;
 
-  // Get invoices that are empty (₹0 or no customer name)
+  // Get invoices that are empty (₹0, no customer name, or a corrupted one)
   const { data: emptyInvoices } = await supabase
     .from('invoices')
     .select('id, order_id, total_amount, customer_name, customer_id')
-    .or('total_amount.eq.0,customer_name.is.null')
+    .or('total_amount.eq.0,customer_name.is.null,customer_name.ilike.Order Date%')
     .not('order_id', 'is', null);
 
   if (!emptyInvoices?.length) return { fixed, failed };
