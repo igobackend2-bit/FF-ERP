@@ -75,6 +75,24 @@ async function fetchAll<T>(build: (from: number, to: number) => any, pageSize = 
   return out;
 }
 
+/** Is Maker-Checker on, and can the current user skip straight to posted? Used by the
+ *  four document pages (Credit/Debit Notes, Vendor Credits, Sales Invoices) that insert
+ *  directly instead of going through the acct_vouchers approval flow. */
+export function useMakerChecker() {
+  const { data } = useQuery({
+    queryKey: ['acct', 'settings', 'maker-checker'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('acct_settings').select('maker_checker_enabled').eq('id', 1).single();
+      if (error) throw error;
+      return !!data?.maker_checker_enabled;
+    },
+    staleTime: 30_000,
+  });
+  const { canApprove } = useAccountsRole();
+  const enabled = !!data;
+  return { enabled, needsApproval: enabled && !canApprove };
+}
+
 export function useAccountsRole() {
   const { user } = useAuth();
   const role = (user?.role || '').toLowerCase();
@@ -308,12 +326,129 @@ export function useSaveAccount() {
 
 export function useUpdateSettings() {
   const { user } = useAuth();
-  return useAcctMutation(async (patch: { lock_date?: string | null; company_state_code?: string }) => {
+  return useAcctMutation(async (patch: { lock_date?: string | null; company_state_code?: string; maker_checker_enabled?: boolean }) => {
     const { data, error } = await supabase.from('acct_settings')
       .update({ ...patch, updated_by: user?.id, updated_at: new Date().toISOString() }).eq('id', 1).select();
     if (error) throw error;
     if (!data?.length) throw new Error('Only Admin or CEO can change these settings');
   }, 'Settings saved');
+}
+
+export function useAddFiscalYear() {
+  return useAcctMutation(async (fy: { name: string; short_code: string; start_date: string; end_date: string }) => {
+    const { error } = await supabase.from('acct_fiscal_years').insert(fy);
+    if (error) throw error;
+  }, 'Fiscal year added');
+}
+
+// ── Audit log (generic `audit_logs` table, shared across the ERP) ──────────
+const ACCOUNTS_AUDIT_RECORD_TYPES = ['SalesInvoice', 'JournalEntry', 'Voucher', 'CreditNote', 'DebitNote', 'VendorCredit', 'PaymentReceived'];
+
+export function useAuditLogs(limit = 100) {
+  return useQuery({
+    queryKey: ['acct', 'audit-logs', limit],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('audit_logs')
+        .select('id, created_at, record_type, record_id, action, performed_by_name, remarks')
+        .in('record_type', ACCOUNTS_AUDIT_RECORD_TYPES)
+        .order('created_at', { ascending: false }).limit(limit);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+export async function logAudit(entry: { record_type: string; record_id: string; action: string; performed_by_name?: string; performed_by_role?: string; remarks?: string }) {
+  const { data: { user } } = await supabase.auth.getUser();
+  await supabase.from('audit_logs').insert({ ...entry, performed_by: user?.id });
+}
+
+// ── Maker-checker pending queue for the 4 direct-insert document types ─────
+export function usePendingDocuments() {
+  return useQuery({
+    queryKey: ['acct', 'pending-documents'],
+    queryFn: async () => {
+      const [cn, dn, vc, inv] = await Promise.all([
+        supabase.from('credit_notes').select('id, credit_note_number, customer_name, amount, created_at').eq('status', 'pending_approval'),
+        supabase.from('debit_notes').select('id, debit_note_number, vendor_name, amount, created_at').eq('status', 'draft'),
+        supabase.from('vendor_credits').select('id, credit_note_number, vendor_name, credit_amount, created_at').eq('status', 'pending_approval'),
+        supabase.from('invoices').select('id, invoice_number, customer_name, total_amount, created_at').eq('status', 'draft'),
+      ]);
+      const rows = [
+        ...(cn.data ?? []).map((r: any) => ({ type: 'Credit Note', number: r.credit_note_number, party: r.customer_name, amount: r.amount, id: r.id, created_at: r.created_at })),
+        ...(dn.data ?? []).map((r: any) => ({ type: 'Debit Note', number: r.debit_note_number, party: r.vendor_name, amount: r.amount, id: r.id, created_at: r.created_at })),
+        ...(vc.data ?? []).map((r: any) => ({ type: 'Vendor Credit', number: r.credit_note_number, party: r.vendor_name, amount: r.credit_amount, id: r.id, created_at: r.created_at })),
+        ...(inv.data ?? []).map((r: any) => ({ type: 'Sales Invoice', number: r.invoice_number, party: r.customer_name, amount: r.total_amount, id: r.id, created_at: r.created_at })),
+      ];
+      return rows.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    },
+  });
+}
+
+// ── Bank reconciliation ─────────────────────────────────────────────────────
+export function useBankAccounts() {
+  const q = useChartOfAccounts();
+  return { ...q, data: (q.data ?? []).filter((a) => a.system_key === 'bank_default' || a.system_key === 'cash') };
+}
+
+export function useBankStatementLines(accountId: string | null, from: string, to: string) {
+  return useQuery({
+    queryKey: ['acct', 'bank-statement-lines', accountId, from, to],
+    enabled: !!accountId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('bank_statement_lines').select('*')
+        .eq('bank_account_id', accountId).gte('statement_date', from).lte('statement_date', to)
+        .order('statement_date');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+/** Posted GL lines for the bank account that aren't matched to any statement line yet. */
+export function useUnreconciledGlLines(accountId: string | null, from: string, to: string) {
+  return useQuery({
+    queryKey: ['acct', 'unreconciled-gl', accountId, from, to],
+    enabled: !!accountId,
+    queryFn: async () => {
+      const [{ data: gl, error: e1 }, { data: matched, error: e2 }] = await Promise.all([
+        supabase.from('acct_gl').select('id, posting_date, voucher_no, narration, party_name, debit, credit')
+          .eq('account_id', accountId).gte('posting_date', from).lte('posting_date', to).order('posting_date'),
+        supabase.from('bank_statement_lines').select('matched_gl_id').eq('bank_account_id', accountId).not('matched_gl_id', 'is', null),
+      ]);
+      if (e1) throw e1;
+      if (e2) throw e2;
+      const matchedIds = new Set((matched ?? []).map((m: any) => m.matched_gl_id));
+      return (gl ?? []).filter((g: any) => !matchedIds.has(g.id));
+    },
+  });
+}
+
+export function useImportBankStatementLines() {
+  const { user } = useAuth();
+  return useAcctMutation(async (v: { bankAccountId: string; rows: { statement_date: string; description?: string; reference_no?: string; debit: number; credit: number }[] }) => {
+    const batchId = crypto.randomUUID();
+    const { error } = await supabase.from('bank_statement_lines').insert(
+      v.rows.map((r) => ({ ...r, bank_account_id: v.bankAccountId, imported_batch_id: batchId, imported_by: user?.id })),
+    );
+    if (error) throw error;
+    return { count: v.rows.length };
+  }, (r) => `Imported ${r.count} statement line(s)`);
+}
+
+export function useMatchBankLine() {
+  return useAcctMutation(async (v: { statementLineId: string; glId: string | null }) => {
+    const { error } = await supabase.from('bank_statement_lines')
+      .update({ matched_gl_id: v.glId, status: v.glId ? 'matched' : 'unmatched' }).eq('id', v.statementLineId);
+    if (error) throw error;
+  }, 'Match updated');
+}
+
+export function useIgnoreBankLine() {
+  return useAcctMutation(async (statementLineId: string) => {
+    const { error } = await supabase.from('bank_statement_lines').update({ status: 'ignored' }).eq('id', statementLineId);
+    if (error) throw error;
+  }, 'Line ignored');
 }
 
 export function useResolvePostingError() {

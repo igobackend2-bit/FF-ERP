@@ -119,6 +119,7 @@ const PurchaseExpensesPage     = lazy(() => import('./pages/ff-operations/purcha
 const RecurringExpensesPage    = lazy(() => import('./pages/ff-operations/purchase/RecurringExpensesPage'));
 const PurchaseOrdersPage       = lazy(() => import('./pages/ff-operations/purchase/PurchaseOrdersPage'));
 const PurchaseBillsPage        = lazy(() => import('./pages/ff-operations/purchase/PurchaseBillsPage'));
+const PurchaseInvoicesPage     = lazy(() => import('./pages/ff-operations/purchase/PurchaseInvoicesPage'));
 const RecurringBillsPage       = lazy(() => import('./pages/ff-operations/purchase/RecurringBillsPage'));
 const PaymentsMadePage         = lazy(() => import('./pages/ff-operations/purchase/PaymentsMadePage'));
 const VendorCreditsPage        = lazy(() => import('./pages/ff-operations/purchase/VendorCreditsPage'));
@@ -301,6 +302,9 @@ const TrialBalancePage = lazy(() => import('@/pages/accounts/books/TrialBalanceP
 const FinancialStatementsPage = lazy(() => import('@/pages/accounts/books/FinancialStatementsPage'));
 const AgeingPage = lazy(() => import('@/pages/accounts/books/AgeingPage'));
 const BooksSettingsPage = lazy(() => import('@/pages/accounts/books/BooksSettingsPage'));
+const PartiesPage = lazy(() => import('@/pages/accounts/books/PartiesPage'));
+const PartyStatementsPage = lazy(() => import('@/pages/accounts/books/PartyStatementsPage'));
+const BankReconciliationPage = lazy(() => import('@/pages/accounts/books/BankReconciliationPage'));
 const DirectorDailyWorkflow = lazy(() => import('@/pages/director/DirectorDailyWorkflow'));
 const DirectorSalaryAuditPage = lazy(() => import('@/pages/director/DirectorSalaryAuditPage'));
 const DirectorMealOrderingPage = lazy(() => import('@/pages/director/DirectorMealOrderingPage').then(m => ({ default: m.DirectorMealOrderingPage })));
@@ -724,6 +728,9 @@ const AppRoutes = () => {
       <Route path="/accounts/books/statements" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><FinancialStatementsPage /></ProtectedRoute>} />
       <Route path="/accounts/books/ageing" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><AgeingPage /></ProtectedRoute>} />
       <Route path="/accounts/books/settings" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><BooksSettingsPage /></ProtectedRoute>} />
+      <Route path="/accounts/books/parties" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><PartiesPage /></ProtectedRoute>} />
+      <Route path="/accounts/books/party-statements" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><PartyStatementsPage /></ProtectedRoute>} />
+      <Route path="/accounts/books/bank-reconciliation" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><BankReconciliationPage /></ProtectedRoute>} />
       <Route path="/accounts/fixed-assets" element={<ProtectedRoute allowedRoles={[...BOOKS_READ_ROLES, 'ff_operations_manager', 'gm']}><FixedAssetRegisterPage /></ProtectedRoute>} />
       <Route path="/admin/vehicles" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'logistics']}><VehicleManagementPage /></ProtectedRoute>} />
       <Route path="/admin/crates" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'logistics']}><CrateTrackingPage /></ProtectedRoute>} />
@@ -970,6 +977,7 @@ const AppRoutes = () => {
       <Route path="/purchase/orders"             element={<ProtectedRoute allowedRoles={OPS_ROLES}><PurchaseOrdersPage /></ProtectedRoute>} />
       <Route path="/purchase/auto-po"            element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'hub_manager', 'gm', 'ceo']}><AutoPOPage /></ProtectedRoute>} />
       <Route path="/purchase/bills"              element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><PurchaseBillsPage /></ProtectedRoute>} />
+      <Route path="/accounts/books/purchase-invoices" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><PurchaseInvoicesPage /></ProtectedRoute>} />
       <Route path="/purchase/auto-bill"          element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><AutoBillPage /></ProtectedRoute>} />
       <Route path="/purchase/buy"               element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'shift_employee', 'ff_operations_manager']}><BuyPage /></ProtectedRoute>} />
       <Route path="/purchase/po-buys"            element={<ProtectedRoute allowedRoles={['admin']}><POBuysReview /></ProtectedRoute>} />

@@ -7,14 +7,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
+import { useMakerChecker, logAudit } from '@/hooks/useAccounts';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  pending_approval: { label: 'Pending Approval', color: 'bg-amber-50 text-amber-700 border-amber-200' },
   open:    { label: 'Open',    color: 'bg-blue-50 text-blue-600 border-blue-200' },
   applied: { label: 'Applied', color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
   expired: { label: 'Expired', color: 'bg-slate-100 text-slate-500 border-slate-200' },
 };
 
 export default function VendorCreditsPage() {
+  const { needsApproval } = useMakerChecker();
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -43,18 +46,20 @@ export default function VendorCreditsPage() {
     if (!form.vendor_name || !form.credit_amount || !form.reason) { toast.error('Vendor, amount and reason required'); return; }
     setSaving(true);
     try {
-      const { error } = await (supabase as any).from('vendor_credits').insert({
-        credit_note_number: `VC-${Date.now()}`,
+      const number = `VC-${Date.now()}`;
+      const { data: inserted, error } = await (supabase as any).from('vendor_credits').insert({
+        credit_note_number: number,
         vendor_name: form.vendor_name,
         bill_reference: form.bill_reference || null,
         credit_amount: parseFloat(form.credit_amount),
         reason: form.reason,
         expiry_date: form.expiry_date || null,
-        status: 'open',
+        status: needsApproval ? 'pending_approval' : 'open',
         created_by: user?.id,
-      });
+      }).select('id').single();
       if (error) throw error;
-      toast.success('Vendor credit created');
+      await logAudit({ record_type: 'VendorCredit', record_id: inserted.id, action: needsApproval ? 'submitted_for_approval' : 'issued', performed_by_name: (user as any)?.name, remarks: number });
+      toast.success(needsApproval ? 'Vendor credit submitted for approval' : 'Vendor credit created');
       setShowForm(false);
       setForm({ vendor_name: '', bill_reference: '', credit_amount: '', reason: '', expiry_date: '' });
       refetch();
@@ -76,7 +81,7 @@ export default function VendorCreditsPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {['all','open','applied','expired'].map(s => {
+        {['all','pending_approval','open','applied','expired'].map(s => {
           const items = s === 'all' ? credits : credits.filter((c: any) => c.status === s);
           const amt = items.reduce((sum: number, c: any) => sum + Number(c.credit_amount || 0), 0);
           return (

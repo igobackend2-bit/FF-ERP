@@ -7,16 +7,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
+import { useMakerChecker, logAudit } from '@/hooks/useAccounts';
 
 interface CreditNote {
   id: string; credit_note_number: string; customer_name: string;
   invoice_reference: string; amount: number; reason: string;
-  status: 'draft' | 'issued' | 'applied' | 'cancelled';
+  status: 'draft' | 'pending_approval' | 'issued' | 'applied' | 'cancelled';
   issued_date: string; created_at: string;
 }
 interface CustomerOption { id: string; name: string; hub_id: string | null }
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  draft:     { label: 'Draft',     color: 'bg-slate-100 text-slate-500 border-slate-200' },
+  draft:            { label: 'Draft',             color: 'bg-slate-100 text-slate-500 border-slate-200' },
+  pending_approval: { label: 'Pending Approval',  color: 'bg-amber-50 text-amber-700 border-amber-200' },
   issued:    { label: 'Issued',    color: 'bg-blue-50 text-blue-600 border-blue-200' },
   applied:   { label: 'Applied',   color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
   cancelled: { label: 'Cancelled', color: 'bg-red-50 text-red-600 border-red-200' },
@@ -26,6 +28,7 @@ const emptyForm = { customer_id: '', customer_name: '', hub_id: '', invoice_refe
 
 export default function CreditNotesPage() {
   const { user } = useAuth();
+  const { needsApproval } = useMakerChecker();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
@@ -68,18 +71,20 @@ export default function CreditNotesPage() {
     if (!form.customer_id || !form.amount || !form.reason) { toast.error('Select a customer, amount and reason'); return; }
     setSaving(true);
     try {
-      const { error } = await (supabase as any).from('credit_notes').insert({
-        credit_note_number: `CN-${Date.now()}`,
+      const number = `CN-${Date.now()}`;
+      const { data: inserted, error } = await (supabase as any).from('credit_notes').insert({
+        credit_note_number: number,
         customer_id: form.customer_id,
         customer_name: form.customer_name,
         hub_id: form.hub_id || null,
         invoice_reference: form.invoice_reference || null,
         amount: parseFloat(form.amount),
-        reason: form.reason, status: 'issued',
+        reason: form.reason, status: needsApproval ? 'pending_approval' : 'issued',
         issued_date: form.issued_date, created_by: user?.id,
-      });
+      }).select('id').single();
       if (error) throw error;
-      toast.success('Credit note created and posted to the books');
+      await logAudit({ record_type: 'CreditNote', record_id: inserted.id, action: needsApproval ? 'submitted_for_approval' : 'issued', performed_by_name: user?.name, remarks: number });
+      toast.success(needsApproval ? 'Credit note submitted for approval' : 'Credit note created and posted to the books');
       setShowForm(false);
       setForm(emptyForm);
       setCustomerQuery('');
@@ -102,7 +107,7 @@ export default function CreditNotesPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {['all','issued','applied','cancelled'].map(s => {
+        {['all','pending_approval','issued','applied','cancelled'].map(s => {
           const items = s === 'all' ? notes : notes.filter(n => n.status === s);
           return (
             <Card key={s} className={`cursor-pointer ${statusFilter === s ? 'ring-1 ring-blue-500' : ''}`} onClick={() => setStatusFilter(s)}>

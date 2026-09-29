@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { supabase } from '@/integrations/supabase/client';
+import { ensurePurchaseBillForPO } from '@/lib/purchaseBillHelper';
 
 export interface StoredPOItem {
   id: number;
@@ -193,6 +194,8 @@ export async function savePOToStore(po: StoredPO): Promise<SavePOResult> {
       return { id: null, error: itemErr.message };
     }
   }
+
+  if (poId) await ensurePurchaseBillForPO(poId, po);
 
   return { id: poId, error: null };
 }
