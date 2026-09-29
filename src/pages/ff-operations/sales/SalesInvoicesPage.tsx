@@ -35,6 +35,8 @@ interface Invoice {
   // joined
   sales_orders?: {
     order_number: string | null;
+    hub_id: string | null;
+    hub_name: string | null;
     sales_order_items: Array<{
       id: string;
       product_name: string | null;
@@ -583,12 +585,24 @@ function GenerateInvoiceModal({ invoice, onClose, onDone }: {
 export default function SalesInvoicesPage() {
   const [search, setSearch]             = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [hubFilter, setHubFilter]       = useState<string>('');
+  const [dateFrom, setDateFrom]         = useState<string>('');
+  const [dateTo, setDateTo]             = useState<string>('');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [needsSetup, setNeedsSetup]     = useState(false);
   const [syncing, setSyncing]           = useState(false);
   const [payModeFor, setPayModeFor]     = useState<string | null>(null);
   const [generateFor, setGenerateFor]   = useState<Invoice | null>(null);
   const queryClient = useQueryClient();
+
+  const { data: hubs = [] } = useQuery({
+    queryKey: ['hubs-for-invoices'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('hubs').select('id, name').eq('is_active', true).order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const PAYMENT_MODES = [
     { label: 'Cash',   value: 'cash',   color: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' },
@@ -615,14 +629,16 @@ export default function SalesInvoicesPage() {
   });
 
   const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
-    queryKey: ['invoices', search, statusFilter],
+    queryKey: ['invoices', search, statusFilter, hubFilter, dateFrom, dateTo],
     queryFn: async () => {
+      // sales_orders needs `!inner` only when we filter on its hub_id — otherwise it would
+      // silently drop any invoice whose linked order was since deleted (order_id SET NULL).
       let q = supabase
         .from('invoices')
         .select(`
           *,
-          sales_orders(
-            order_number,
+          sales_orders${hubFilter ? '!inner' : ''}(
+            order_number, hub_id, hub_name,
             sales_order_items(
               id, product_name, quantity, qty_kg, unit_price, total_price, subtotal, unit, qc_grade, grade,
               products(name, category)
@@ -634,6 +650,9 @@ export default function SalesInvoicesPage() {
 
       if (statusFilter !== 'all') q = q.eq('status', statusFilter);
       if (search.trim())  q = q.or(`invoice_number.ilike.%${search}%,customer_name.ilike.%${search}%`);
+      if (hubFilter) q = q.eq('sales_orders.hub_id', hubFilter);
+      if (dateFrom) q = q.gte('invoice_date', dateFrom);
+      if (dateTo) q = q.lte('invoice_date', dateTo);
 
       const { data, error } = await q;
       if (error) {
@@ -722,7 +741,30 @@ export default function SalesInvoicesPage() {
             placeholder="Search by invoice # or customer…"
           />
         </div>
-        <div className="flex gap-1.5">
+        <select
+          value={hubFilter} onChange={e => setHubFilter(e.target.value)}
+          className="px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+        >
+          <option value="">All Hubs</option>
+          {hubs.map((h: any) => <option key={h.id} value={h.id}>{h.name}</option>)}
+        </select>
+        <input
+          type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+          className="px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+          title="From date"
+        />
+        <input
+          type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+          className="px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+          title="To date"
+        />
+        {(hubFilter || dateFrom || dateTo) && (
+          <button onClick={() => { setHubFilter(''); setDateFrom(''); setDateTo(''); }}
+            className="px-2.5 py-2 rounded-xl text-xs font-bold text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+            Clear
+          </button>
+        )}
+        <div className="flex gap-1.5 flex-wrap">
           {['all', 'draft', 'issued', 'unpaid', 'paid', 'processing', 'partial', 'cancelled'].map(s => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={cn(
@@ -776,7 +818,10 @@ export default function SalesInvoicesPage() {
                     {inv.invoice_number}
                   </div>
                   {inv.sales_orders?.order_number && (
-                    <div className="text-[10px] text-slate-400 mt-0.5">Order: {inv.sales_orders.order_number}</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      Order: {inv.sales_orders.order_number}
+                      {inv.sales_orders.hub_name && <> · {inv.sales_orders.hub_name}</>}
+                    </div>
                   )}
                 </div>
                 <div>
