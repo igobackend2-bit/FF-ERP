@@ -221,7 +221,7 @@ function ApprovalCell({
         onClick={raiseAndApprove}
         disabled={approving || !canRaise}
         title={!vendor?.id ? 'Add this vendor\'s bank details first (Bank/IFSC column)' : !canRaise ? 'PO has no items' : 'Raise this PO as a vendor payment, already approved as Manager'}
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
       >
         {approving ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <CheckCircle2 className="w-2.5 h-2.5" />} Raise & Approve
       </button>
@@ -771,21 +771,21 @@ export default function PurchaseReportPage() {
               aria-label="Purchase orders table — use the left and right arrow keys to scroll"
               className="overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-300"
             >
-            <table className="w-full min-w-[1500px] text-sm">
+            <table className="w-full min-w-[1180px] text-xs">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="py-3 px-3 w-8"></th>
-                  <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">PO Number</th>
-                  <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Vendor</th>
-                  <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Hub</th>
-                  <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">GSTIN</th>
-                  <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Bank / IFSC</th>
-                  <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Products</th>
-                  <th className="text-right py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Total Qty</th>
-                  <th className="text-right py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Amount (₹)</th>
-                  <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">PO / Delivery Date</th>
-                  <th className="text-center py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Status</th>
-                  <th className="sticky right-0 z-10 bg-gray-50 border-l border-gray-100 text-center py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Approval</th>
+                  <th className="py-2 px-2 w-8"></th>
+                  <th className="text-left py-2 px-2 text-[10px] font-black uppercase tracking-wider text-gray-400">PO Number</th>
+                  <th className="text-left py-2 px-2 text-[10px] font-black uppercase tracking-wider text-gray-400">Vendor</th>
+                  <th className="text-left py-2 px-2 text-[10px] font-black uppercase tracking-wider text-gray-400">Hub</th>
+                  <th className="text-left py-2 px-2 text-[10px] font-black uppercase tracking-wider text-gray-400">GSTIN</th>
+                  <th className="text-left py-2 px-2 text-[10px] font-black uppercase tracking-wider text-gray-400">Bank / IFSC</th>
+                  <th className="text-left py-2 px-2 text-[10px] font-black uppercase tracking-wider text-gray-400">Products</th>
+                  <th className="text-right py-2 px-2 text-[10px] font-black uppercase tracking-wider text-gray-400">Total Qty</th>
+                  <th className="text-right py-2 px-2 text-[10px] font-black uppercase tracking-wider text-gray-400">Amount (₹)</th>
+                  <th className="text-left py-2 px-2 text-[10px] font-black uppercase tracking-wider text-gray-400">PO / Delivery Date</th>
+                  <th className="text-center py-2 px-2 text-[10px] font-black uppercase tracking-wider text-gray-400">Status</th>
+                  <th className="sticky right-0 z-10 bg-gray-50 border-l border-gray-100 text-center py-2 px-2 text-[10px] font-black uppercase tracking-wider text-gray-400">Approval</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -802,66 +802,66 @@ export default function PurchaseReportPage() {
                         className={`hover:bg-gray-50 transition-colors cursor-pointer ${isExpanded ? 'bg-blue-50/30' : ''}`}
                       >
                         {/* Expand toggle */}
-                        <td className="py-3 px-3 text-gray-400">
+                        <td className="py-2 px-2 text-gray-400">
                           {po.items.length > 0
-                            ? isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                            : <ChevronsUpDown className="w-4 h-4 opacity-30" />}
+                            ? isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                            : <ChevronsUpDown className="w-3.5 h-3.5 opacity-30" />}
                         </td>
 
                         {/* PO Number */}
-                        <td className="py-3 px-3">
-                          <p className="font-black text-blue-600 font-mono text-sm">{po.poNumber}</p>
-                          <p className="text-[10px] text-gray-400">{po.items.length} item{po.items.length !== 1 ? 's' : ''}</p>
+                        <td className="py-2 px-2">
+                          <p className="font-black text-blue-600 font-mono text-xs">{po.poNumber}</p>
+                          <p className="text-[9px] text-gray-400">{po.items.length} item{po.items.length !== 1 ? 's' : ''}</p>
                         </td>
 
                         {/* Vendor */}
-                        <td className="py-3 px-3">
-                          <p className="font-semibold text-gray-900 text-sm">{po.vendorName}</p>
-                          {vendor?.mobile && <p className="text-[10px] text-gray-400">{vendor.mobile}</p>}
+                        <td className="py-2 px-2">
+                          <p className="font-semibold text-gray-900 text-xs">{po.vendorName}</p>
+                          {vendor?.mobile && <p className="text-[9px] text-gray-400">{vendor.mobile}</p>}
                         </td>
 
                         {/* Hub */}
-                        <td className="py-3 px-3 text-xs text-gray-600">
+                        <td className="py-2 px-2 text-xs text-gray-600">
                           {po.hub_name
                             ? <span className="inline-flex items-center gap-1"><Building2 className="w-3 h-3 text-gray-300" />{po.hub_name}</span>
                             : <span className="text-gray-300">—</span>}
                         </td>
 
                         {/* GSTIN */}
-                        <td className="py-3 px-3 font-mono text-gray-600 text-xs">
+                        <td className="py-2 px-2 font-mono text-gray-600 text-xs">
                           {vendor?.gstin || <span className="text-gray-300">—</span>}
                         </td>
 
                         {/* Bank / IFSC — editable */}
-                        <td className="py-3 px-3 text-xs" onClick={e => e.stopPropagation()}>
+                        <td className="py-2 px-2 text-xs" onClick={e => e.stopPropagation()}>
                           <BankDetailsCell vendor={vendor} vendorName={po.vendorName} onSaved={handleVendorSaved} />
                         </td>
 
                         {/* Products — full list on hover since the cell truncates long ones */}
-                        <td className="py-3 px-3 text-xs text-gray-600 max-w-[200px]">
+                        <td className="py-2 px-2 text-xs text-gray-600 max-w-[150px]">
                           <p className="truncate" title={po.items.map(i => i.itemName).join(', ')}>
                             {po.items.map(i => i.itemName).join(', ') || '—'}
                           </p>
                         </td>
 
                         {/* Total Qty */}
-                        <td className="py-3 px-3 text-right font-semibold text-gray-800 text-sm">
+                        <td className="py-2 px-2 text-right font-semibold text-gray-800 text-xs">
                           {totalQty > 0 ? `${totalQty} kg` : '—'}
                         </td>
 
                         {/* Amount */}
-                        <td className="py-3 px-3 text-right font-black text-gray-900">
+                        <td className="py-2 px-2 text-right font-black text-gray-900 text-xs">
                           ₹{fmt(po.total)}
                         </td>
 
                         {/* Date */}
-                        <td className="py-3 px-3 text-xs text-gray-500">
+                        <td className="py-2 px-2 text-xs text-gray-500">
                           <p><span className="text-gray-400">PO:</span> {po.date}</p>
                           {po.deliveryDate && <p className="text-gray-400">Del: {po.deliveryDate}</p>}
                         </td>
 
                         {/* Status — click to update manually */}
-                        <td className="py-3 px-3 text-center" onClick={e => e.stopPropagation()}>
+                        <td className="py-2 px-2 text-center" onClick={e => e.stopPropagation()}>
                           <StatusCell po={po} onSaved={() => qc.invalidateQueries({ queryKey: ['purchase-report-pos'] })} />
                           {po.approvedBy && (
                             <p className="text-[9px] text-gray-400 mt-0.5">{po.approvedBy}</p>
@@ -870,7 +870,7 @@ export default function PurchaseReportPage() {
 
                         {/* Approval — this PO's actual payment-approval progress. Pinned to the
                             right edge of the scrollable table so it's never cut off out of view. */}
-                        <td className={`sticky right-0 z-10 border-l border-gray-100 py-3 px-3 text-center ${isExpanded ? 'bg-blue-50' : 'bg-white'}`}>
+                        <td className={`sticky right-0 z-10 border-l border-gray-100 py-2 px-2 text-center ${isExpanded ? 'bg-blue-50' : 'bg-white'}`}>
                           <ApprovalCell
                             payment={paymentByPO[po.id]}
                             po={po}
