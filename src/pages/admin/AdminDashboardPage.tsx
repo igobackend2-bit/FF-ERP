@@ -13,7 +13,11 @@ import { useAuditLogs } from '@/hooks/useAuditLogs';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-// ── Efficio-style KPI Card ─────────────────────────────────────────────────────
+// ── KPI Card ───────────────────────────────────────────────────────────────────
+// Colored top accent + gradient icon badge per card, so a dense grid of 15
+// metrics still scans quickly by category color. Click affordance is a
+// chevron that slides in on hover instead of a boxed "Details" button —
+// keeps the card body focused on the number.
 function KpiCard({
   label, value, sub, icon: Icon, color, onClick, isLoading, notAvailable,
 }: {
@@ -28,35 +32,46 @@ function KpiCard({
 }) {
   return (
     <div
-      className={cn('rounded-2xl p-5 transition-all duration-200', onClick && 'cursor-pointer')}
-      style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
+      className={cn('group relative rounded-2xl p-5 pt-[18px] overflow-hidden transition-all duration-200', onClick && 'cursor-pointer')}
+      style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
       onClick={onClick}
-      onMouseEnter={e => { if (onClick) { (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.borderColor = '#D1D5DB'; } }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)'; (e.currentTarget as HTMLElement).style.borderColor = '#E5E7EB'; }}
+      onMouseEnter={e => {
+        if (!onClick) return;
+        const el = e.currentTarget as HTMLElement;
+        el.style.boxShadow = `0 10px 24px -8px ${color}40`;
+        el.style.borderColor = color + '50';
+        el.style.transform = 'translateY(-2px)';
+      }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+        el.style.borderColor = '#E5E7EB';
+        el.style.transform = 'translateY(0)';
+      }}
     >
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-[13px] font-medium" style={{ color: '#6B7280' }}>{label}</span>
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: color + '15' }}>
-          <Icon className="w-4 h-4" style={{ color }} />
+      <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: `linear-gradient(90deg, ${color}, ${color}00)` }} />
+
+      <div className="flex items-start justify-between mb-4">
+        <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
+          style={{ background: `linear-gradient(135deg, ${color}26, ${color}0D)` }}>
+          <Icon className="w-5 h-5" style={{ color }} />
         </div>
-      </div>
-      <div className="flex items-end gap-2 mb-3">
-        {isLoading ? (
-          <div className="h-9 w-16 rounded-lg animate-pulse" style={{ background: '#F3F4F6' }} />
-        ) : (
-          <span className={cn('text-[32px] font-bold leading-none tabular-nums')} style={{ color: notAvailable ? '#D1D5DB' : '#111827' }}>{value}</span>
-        )}
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-[12px]" style={{ color: '#9CA3AF' }}>{sub}</span>
         {onClick && (
-          <button className="text-[12px] font-medium px-3 py-1 rounded-lg transition-colors"
-            style={{ color: '#2563EB', border: '1px solid #BFDBFE', background: '#EFF6FF' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#DBEAFE'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#EFF6FF'; }}>
-            Details →
-          </button>
+          <ChevronRight
+            className="w-4 h-4 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 mt-1"
+            style={{ color: '#9CA3AF' }}
+          />
         )}
+      </div>
+
+      <div className="space-y-1">
+        <span className="text-[12.5px] font-medium block" style={{ color: '#6B7280' }}>{label}</span>
+        {isLoading ? (
+          <div className="h-9 w-20 rounded-lg animate-pulse" style={{ background: '#F3F4F6' }} />
+        ) : (
+          <span className="text-[30px] font-bold leading-tight tabular-nums block" style={{ color: notAvailable ? '#D1D5DB' : '#111827' }}>{value}</span>
+        )}
+        {sub && <span className="text-[12px] block" style={{ color: '#9CA3AF' }}>{sub}</span>}
       </div>
     </div>
   );
