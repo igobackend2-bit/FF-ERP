@@ -435,6 +435,7 @@ export const navigationConfig: NavGroup[] = [
     roles: ['admin'],
     items: [
       { icon: LayoutDashboard, label: 'Dashboard',                 path: '/admin-dashboard' },
+      { icon: UserCog,         label: 'User Management',           path: '/user-management' },
       { icon: BarChart3,       label: 'FF Operations Overview',    path: '/ff-operations/gm-dashboard' },
       { icon: Sunrise,         label: 'Day Open / Close KPIs',      path: '/ff-operations/day-kpis' },
       { icon: ClipboardList,   label: 'Sales Orders',              path: '/sales/orders' },
