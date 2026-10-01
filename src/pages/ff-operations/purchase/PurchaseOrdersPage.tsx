@@ -785,13 +785,15 @@ export default function PurchaseOrdersPage() {
   // included too, for parity with the rest of the FF payment/PO surface.
   // 'admin' and 'ceo' intentionally excluded — their sidebar links to
   // Purchase Orders are meant as a read-only overview, not an edit surface.
+  // 'field_executive' removed 2026-10-01 — this is a field sales/collection
+  // role, not a purchase role, and should see POs read-only, no Edit button.
   // A named individual can still get edit access via the separate
   // ff_payment_access profile flag below, same as any other role.
   const PO_EDIT_ROLES = new Set([
     'director', 'gm', 'gmo', 'smo', 'boi', 'nsm',
     'hr', 'accounts', 'back_office',
     'purchase_manager', 'purchase_head', 'warehouse_manager', 'qc_manager',
-    'field_executive', 'tele_caller', 'bde',
+    'tele_caller', 'bde',
     'ff_operations_manager', 'hub_manager', 'l1_manager', 'shift_employee',
   ]);
   const canEditPO = PO_EDIT_ROLES.has(user?.role ?? '') || (user as any)?.ff_payment_access === true;
