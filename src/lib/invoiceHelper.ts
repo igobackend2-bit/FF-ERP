@@ -45,10 +45,18 @@ export interface CreateInvoiceParams {
 export async function createInvoiceForOrder(params: CreateInvoiceParams): Promise<string | null> {
   try {
     // ── Guard: don't create a duplicate invoice for the same order ──
+    // Scoped to non-cancelled rows + limit(1): some orders still carry legacy
+    // duplicate invoices (1 active + N cancelled, from a trigger race fixed
+    // 2026-09-29 — the dupes were cancelled, not deleted). An unscoped
+    // .maybeSingle() throws PGRST116 "multiple rows returned" for any of
+    // those orders, which aborted this function for ~443 orders during
+    // "Sync Missing" and surfaced as silent console-only failures.
     const { data: existing } = await supabase
       .from('invoices')
       .select('id')
       .eq('order_id', params.orderId)
+      .neq('status', 'cancelled')
+      .limit(1)
       .maybeSingle();
 
     if (existing?.id) {
@@ -110,13 +118,26 @@ export async function backfillMissingInvoices(): Promise<{ created: number; fail
 
   if (!orders?.length) return { created, failed };
 
-  // Get order IDs that already have invoices
-  const { data: existing } = await supabase
-    .from('invoices')
-    .select('order_id')
-    .not('order_id', 'is', null);
-
-  const existingOrderIds = new Set((existing ?? []).map((e: any) => e.order_id));
+  // Get order IDs that already have invoices. Paginated: PostgREST caps an
+  // unbounded select at 1000 rows, and this table has grown past that
+  // (2,912 invoice rows, many orders carrying legacy cancelled duplicates).
+  // An unpaginated fetch silently returned only the first 1000 rows, so
+  // hundreds of orders that DO have an invoice looked "missing" here and
+  // were sent into createInvoiceForOrder(), which then failed on its own
+  // duplicate check — the root cause of the "N invoice(s) could not be
+  // updated" errors during Sync Missing.
+  const existingOrderIds = new Set<string>();
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data: page, error } = await supabase
+      .from('invoices')
+      .select('order_id')
+      .not('order_id', 'is', null)
+      .range(from, from + PAGE - 1);
+    if (error || !page?.length) break;
+    for (const row of page as any[]) existingOrderIds.add(row.order_id);
+    if (page.length < PAGE) break;
+  }
 
   const missing = orders.filter(o => !existingOrderIds.has(o.id));
 
