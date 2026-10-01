@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users, Banknote, Truck, Package, ShoppingCart, Boxes, Camera,
   RotateCcw, FileSearch, RefreshCw, ChevronRight, ClipboardList, Layers, MapPin,
+  Sunrise, PackageX, Wallet, Clock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
@@ -181,6 +182,82 @@ export function AdminDashboardPage() {
   });
   const pendingReversalsCount = pendingReversals?.length || 0;
 
+  // ── FF Operations KPIs ──────────────────────────────────────────────
+  // Headline numbers from the Day Open/Close pipeline (/ff-operations/day-kpis)
+  // and FF Operations Overview, condensed here so the admin doesn't have to
+  // leave the dashboard to see today's revenue, the overnight PO backlog,
+  // stock-outs, or today's collections.
+  const { data: todayOrdersSummary, isLoading: todayOrdersLoading } = useQuery({
+    queryKey: ['admin-ff-ops-today-orders', today],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sales_orders')
+        .select('total_amount')
+        .eq('order_date', today)
+        .neq('status', 'cancelled');
+      if (error) throw error;
+      const rows = data ?? [];
+      return { revenue: rows.reduce((s, r: any) => s + Number(r.total_amount ?? 0), 0) };
+    },
+  });
+
+  const { data: overnightPOs, isLoading: overnightPOsLoading } = useQuery({
+    queryKey: ['admin-ff-ops-overnight-pos', today],
+    queryFn: async () => {
+      const { count, error } = await supabase.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('eod_date', today);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
+  const { data: unassignedPOCount, isLoading: unassignedPOLoading } = useQuery({
+    queryKey: ['admin-ff-ops-unassigned-pos'],
+    queryFn: async () => {
+      const { count, error } = await supabase.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('status', 'pending').is('assigned_executive_id', null);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
+  const { data: stockAlerts, isLoading: stockAlertsLoading } = useQuery({
+    queryKey: ['admin-ff-ops-stock-alerts'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('inventory').select('quantity, min_threshold');
+      if (error) throw error;
+      let outOfStock = 0, lowStock = 0;
+      (data ?? []).forEach((r: any) => {
+        const qty = Number(r.quantity ?? 0);
+        const min = Number(r.min_threshold ?? 0);
+        if (qty === 0) outOfStock++;
+        else if (min > 0 && qty <= min) lowStock++;
+      });
+      return outOfStock + lowStock;
+    },
+  });
+
+  const { data: cashCollectedToday, isLoading: cashCollectedLoading } = useQuery({
+    queryKey: ['admin-ff-ops-cash-collected', today],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('cash_collections').select('amount').eq('collection_date', today).eq('status', 'verified');
+      if (error) throw error;
+      return (data ?? []).reduce((s, r: any) => s + Number(r.amount ?? 0), 0);
+    },
+  });
+
+  const { data: activePaymentQueue, isLoading: activePaymentQueueLoading } = useQuery({
+    queryKey: ['admin-ff-ops-active-payment-queue'],
+    queryFn: async () => {
+      const ACTIVE_STATUSES = ['pending_ff_ops', 'pending_l1', 'pending_admin', 'pending_ceo', 'pending_accounts'];
+      const [vendorRes, transportRes] = await Promise.all([
+        supabase.from('ff_vendor_payments').select('id', { count: 'exact', head: true }).in('payment_status', ACTIVE_STATUSES),
+        supabase.from('ff_transport_payments').select('id', { count: 'exact', head: true }).in('payment_status', ACTIVE_STATUSES),
+      ]);
+      if (vendorRes.error) throw vendorRes.error;
+      if (transportRes.error) throw transportRes.error;
+      return (vendorRes.count ?? 0) + (transportRes.count ?? 0);
+    },
+  });
+
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
 
@@ -239,6 +316,46 @@ export function AdminDashboardPage() {
           label="Audit Entries" value={logs.length} sub="recent system events"
           icon={FileSearch} color="#6B7A8D" onClick={() => navigate('/audit-logs')} isLoading={logsLoading}
         />
+      </div>
+
+      {/* ── FF Operations KPIs ───────────────────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-[15px] font-bold" style={{ color: '#111827' }}>FF Operations KPIs</h2>
+          <button
+            onClick={() => navigate('/ff-operations/day-kpis')}
+            className="text-[12px] font-medium"
+            style={{ color: '#2563EB' }}
+          >
+            View Day Open / Close KPIs →
+          </button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <KpiCard
+            label="Today's Order Revenue" value={`₹${(todayOrdersSummary?.revenue ?? 0).toLocaleString('en-IN')}`} sub="non-cancelled orders"
+            icon={ShoppingCart} color="#0E8A6B" onClick={() => navigate('/sales/orders')} isLoading={todayOrdersLoading}
+          />
+          <KpiCard
+            label="Overnight POs" value={overnightPOs ?? 0} sub="generated by EOD engine today"
+            icon={Sunrise} color="#D97706" onClick={() => navigate('/purchase/orders')} isLoading={overnightPOsLoading}
+          />
+          <KpiCard
+            label="Unassigned PO Backlog" value={unassignedPOCount ?? 0} sub="pending, no executive assigned"
+            icon={Clock} color="#DC2626" onClick={() => navigate('/purchase/orders')} isLoading={unassignedPOLoading}
+          />
+          <KpiCard
+            label="Stock Alerts" value={stockAlerts ?? 0} sub="out of stock + low stock lines"
+            icon={PackageX} color="#DC2626" onClick={() => navigate('/ff-operations/day-kpis')} isLoading={stockAlertsLoading}
+          />
+          <KpiCard
+            label="Cash Collected Today" value={`₹${(cashCollectedToday ?? 0).toLocaleString('en-IN')}`} sub="verified collections"
+            icon={Wallet} color="#0891B2" onClick={() => navigate('/sales/collections')} isLoading={cashCollectedLoading}
+          />
+          <KpiCard
+            label="Active Payment Queue" value={activePaymentQueue ?? 0} sub="vendor + transport, all stages"
+            icon={Banknote} color="#7C3AED" onClick={() => navigate('/accounts/batch-history')} isLoading={activePaymentQueueLoading}
+          />
+        </div>
       </div>
 
       {/* ── Quick Actions ────────────────────────────────────────────────── */}
