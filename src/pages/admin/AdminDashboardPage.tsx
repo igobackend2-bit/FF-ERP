@@ -32,7 +32,7 @@ function KpiCard({
 }) {
   return (
     <div
-      className={cn('group relative rounded-2xl p-5 pt-[18px] overflow-hidden transition-all duration-200', onClick && 'cursor-pointer')}
+      className={cn('group relative rounded-xl p-3.5 pt-[14px] overflow-hidden transition-all duration-200', onClick && 'cursor-pointer')}
       style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
       onClick={onClick}
       onMouseEnter={e => {
@@ -51,27 +51,27 @@ function KpiCard({
     >
       <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: `linear-gradient(90deg, ${color}, ${color}00)` }} />
 
-      <div className="flex items-start justify-between mb-4">
-        <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
+      <div className="flex items-start justify-between mb-2">
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
           style={{ background: `linear-gradient(135deg, ${color}26, ${color}0D)` }}>
-          <Icon className="w-5 h-5" style={{ color }} />
+          <Icon className="w-4 h-4" style={{ color }} />
         </div>
         {onClick && (
           <ChevronRight
-            className="w-4 h-4 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 mt-1"
+            className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 mt-0.5"
             style={{ color: '#9CA3AF' }}
           />
         )}
       </div>
 
-      <div className="space-y-1">
-        <span className="text-[12.5px] font-medium block" style={{ color: '#6B7280' }}>{label}</span>
+      <div className="space-y-0.5">
+        <span className="text-[11px] font-medium block truncate" style={{ color: '#6B7280' }}>{label}</span>
         {isLoading ? (
-          <div className="h-9 w-20 rounded-lg animate-pulse" style={{ background: '#F3F4F6' }} />
+          <div className="h-6 w-14 rounded-lg animate-pulse" style={{ background: '#F3F4F6' }} />
         ) : (
-          <span className="text-[30px] font-bold leading-tight tabular-nums block" style={{ color: notAvailable ? '#D1D5DB' : '#111827' }}>{value}</span>
+          <span className="text-[20px] font-bold leading-tight tabular-nums block" style={{ color: notAvailable ? '#D1D5DB' : '#111827' }}>{value}</span>
         )}
-        {sub && <span className="text-[12px] block" style={{ color: '#9CA3AF' }}>{sub}</span>}
+        {sub && <span className="text-[10.5px] block truncate" style={{ color: '#9CA3AF' }}>{sub}</span>}
       </div>
     </div>
   );
