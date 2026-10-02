@@ -37,6 +37,7 @@ interface Invoice {
     order_number: string | null;
     hub_id: string | null;
     hub_name: string | null;
+    created_at: string | null;
     sales_order_items: Array<{
       id: string;
       product_name: string | null;
@@ -51,6 +52,20 @@ interface Invoice {
       products?: { name: string; category: string } | null;
     }>;
   } | null;
+}
+
+/* ─── Entry time ─────────────────────────────────────────────────────────────── */
+// The invoice date follows the order's selected (delivery) date, which is often the
+// day after the order was typed in. This line shows when the order was actually
+// entered, with its own date whenever that differs from the invoice date.
+function EnteredAt({ inv }: { inv: Invoice }) {
+  const ts = inv.sales_orders?.created_at ?? inv.created_at;
+  if (!ts) return null;
+  const at = new Date(ts);
+  if (isNaN(at.getTime())) return null;
+  const time = format(at, 'hh:mm a');
+  const label = format(at, 'yyyy-MM-dd') === inv.invoice_date ? time : `${format(at, 'dd MMM')}, ${time}`;
+  return <div className="text-[10px] text-slate-400 mt-0.5">Entered {label}</div>;
 }
 
 /* ─── Status config ──────────────────────────────────────────────────────────── */
@@ -638,7 +653,7 @@ export default function SalesInvoicesPage() {
         .select(`
           *,
           sales_orders${hubFilter ? '!inner' : ''}(
-            order_number, hub_id, hub_name,
+            order_number, hub_id, hub_name, created_at,
             sales_order_items(
               id, product_name, quantity, qty_kg, unit_price, total_price, subtotal, unit, qc_grade, grade,
               products(name, category)
@@ -834,6 +849,7 @@ export default function SalesInvoicesPage() {
                 </div>
                 <div className="text-xs text-slate-500">
                   {format(new Date(inv.invoice_date), 'dd MMM yyyy')}
+                  <EnteredAt inv={inv} />
                 </div>
                 <div className="text-right">
                   <div className="font-bold text-sm text-slate-800">₹{inv.total_amount.toLocaleString('en-IN')}</div>
