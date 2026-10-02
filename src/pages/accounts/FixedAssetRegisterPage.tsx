@@ -20,7 +20,7 @@ interface Asset {
 interface Staff { id: string; name: string }
 
 const inr = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-const emptyForm = { asset_name: '', asset_code: '', account_id: '', hub_id: '', purchase_date: format(new Date(), 'yyyy-MM-dd'), purchase_cost: '', salvage_value: '0', useful_life_years: '5', notes: '' };
+const emptyForm = { asset_name: '', asset_code: '', account_id: '', hub_id: '', purchase_date: format(new Date(), 'yyyy-MM-dd'), purchase_cost: '', funding: 'bank', salvage_value: '0', useful_life_years: '5', notes: '' };
 
 export default function FixedAssetRegisterPage() {
   const { user } = useAuth();
@@ -131,6 +131,7 @@ export default function FixedAssetRegisterPage() {
         hub_id: form.hub_id || null,
         purchase_date: form.purchase_date,
         purchase_cost: parseFloat(form.purchase_cost),
+        funding: form.funding,
         salvage_value: parseFloat(form.salvage_value) || 0,
         useful_life_years: parseFloat(form.useful_life_years),
         notes: form.notes || null,
@@ -240,6 +241,14 @@ export default function FixedAssetRegisterPage() {
               </div>
               <div><label className="text-xs text-slate-500 mb-1 block">Purchase Date *</label><Input type="date" value={form.purchase_date} onChange={e => setForm(f => ({ ...f, purchase_date: e.target.value }))} /></div>
               <div><label className="text-xs text-slate-500 mb-1 block">Purchase Cost (₹) *</label><Input type="number" value={form.purchase_cost} onChange={e => setForm(f => ({ ...f, purchase_cost: e.target.value }))} placeholder="0.00" /></div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Paid from</label>
+                <select value={form.funding} onChange={e => setForm(f => ({ ...f, funding: e.target.value }))} className="w-full h-9 rounded-md border border-slate-200 px-3 text-sm">
+                  <option value="bank">Bank (Kotak)</option>
+                  <option value="cash">Cash in hand</option>
+                  <option value="opening">Already owned — opening balance</option>
+                </select>
+              </div>
               <div><label className="text-xs text-slate-500 mb-1 block">Salvage Value (₹)</label><Input type="number" value={form.salvage_value} onChange={e => setForm(f => ({ ...f, salvage_value: e.target.value }))} /></div>
               <div><label className="text-xs text-slate-500 mb-1 block">Useful Life (years) *</label><Input type="number" value={form.useful_life_years} onChange={e => setForm(f => ({ ...f, useful_life_years: e.target.value }))} /></div>
               <div className="md:col-span-2"><label className="text-xs text-slate-500 mb-1 block">Notes</label><Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional" /></div>

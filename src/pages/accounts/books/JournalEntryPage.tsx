@@ -98,6 +98,16 @@ export default function JournalEntryPage() {
   if (type !== 'opening' && booksStart && date < booksStart) problems.push(`The books start on ${booksStart}; use an Opening balances entry for earlier figures.`);
   if (lockDate && date <= lockDate) problems.push(`Books are locked up to ${lockDate}.`);
 
+  // Closing stock: Dr Stock in Hand / Cr Purchases (reverse it on the first day of next month)
+  const closingStock = () => {
+    const stock = (accountsQ.data ?? []).find((a) => a.system_key === 'stock');
+    const purchases = (accountsQ.data ?? []).find((a) => a.system_key === 'purchases');
+    if (!stock || !purchases) return;
+    setType('journal');
+    setNarration('Closing stock adjustment — unsold stock carried to Stock in Hand');
+    setLines([{ ...blank(), account_id: stock.id }, { ...blank(), account_id: purchases.id }]);
+  };
+
   const balanceLast = () => {
     const last = [...lines].reverse().find((l) => !num(l.debit) && !num(l.credit)) || lines[lines.length - 1];
     const others = lines.filter((l) => l.key !== last.key);
@@ -178,6 +188,7 @@ export default function JournalEntryPage() {
                 <div className="flex gap-2">
                   <button onClick={() => setLines((ls) => [...ls, blank()])} className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 bg-white hover:bg-gray-50"><Plus className="w-3.5 h-3.5" /> Add line</button>
                   <button onClick={balanceLast} disabled={Math.abs(diff) < 0.005} className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40"><Scale className="w-3.5 h-3.5" /> Balance last line</button>
+                  <button onClick={closingStock} className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 bg-white hover:bg-gray-50">Closing stock</button>
                 </div>
               </td>
               <td className="px-2 py-2.5 text-right font-semibold tabular-nums">{inr(dr)}</td>

@@ -84,9 +84,9 @@ function ProfitAndLoss() {
 
   const results = useQueries({
     queries: cols.map((c) => ({
-      queryKey: ['acct', 'tb', from, to, c.hub || 'all'],
+      queryKey: ['acct', 'tb', from, to, c.hub || 'all', true],
       queryFn: async () => {
-        const { data, error } = await supabase.rpc('acct_trial_balance', { p_from: from, p_to: to, p_hub: c.hub });
+        const { data, error } = await supabase.rpc('acct_trial_balance', { p_from: from, p_to: to, p_hub: c.hub, p_exclude_closing: true });
         if (error) throw error;
         return (data ?? []).map((r: any) => ({ ...r, opening: +r.opening, period_debit: +r.period_debit, period_credit: +r.period_credit, closing: +r.closing }));
       },
@@ -152,6 +152,7 @@ function ProfitAndLoss() {
             </tfoot>
           </table>
         </div>
+        <p className="text-xs text-gray-400">Purchases are expensed when bought. Post a closing-stock journal (Journal entry → “Closing stock”) to move unsold stock to the Balance Sheet.</p>
         {compare && <p className="text-xs text-gray-400">Head-office postings with no hub are included in Total only.</p>}
       </LoadState>
     </div>
@@ -210,7 +211,7 @@ function BalanceSheet() {
                 <Section title="Liabilities" root="liability" accounts={accounts} columns={col} sign={-1} linkParams={`&to=${asOf}`} />
                 <tr className="border-t border-gray-200 font-semibold"><td className="px-4 py-2">Total liabilities</td><td className="px-4 py-2 text-right"><Amount v={liabilities} strong /></td></tr>
                 <Section title="Equity" root="equity" accounts={accounts} columns={col} sign={-1} linkParams={`&to=${asOf}`} />
-                <tr className="border-t border-gray-100"><td className="px-4 py-1.5 pl-[34px] text-slate-600">Profit / (loss) for the year to date</td><td className="px-4 py-1.5 text-right"><Amount v={profit} /></td></tr>
+                <tr className="border-t border-gray-100"><td className="px-4 py-1.5 pl-[34px] text-slate-600">Profit / (loss) not yet closed to Retained Earnings</td><td className="px-4 py-1.5 text-right"><Amount v={profit} /></td></tr>
                 <tr className="border-t border-gray-200 font-semibold"><td className="px-4 py-2">Total equity</td><td className="px-4 py-2 text-right"><Amount v={equity + profit} strong /></td></tr>
               </tbody>
               <tfoot><tr className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-800"><td className="px-4 py-2.5">Total liabilities + equity</td><td className="px-4 py-2.5 text-right"><Amount v={liabilities + equity + profit} strong /></td></tr></tfoot>

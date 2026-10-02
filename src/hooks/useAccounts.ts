@@ -61,7 +61,11 @@ export function fyOf(d = new Date()) {
   return { from: `${y}-04-01`, to: `${y + 1}-03-31`, label: `FY ${y}-${String((y + 1) % 100).padStart(2, '0')}` };
 }
 
-export const today = () => new Date().toISOString().slice(0, 10);
+/** Local (IST for our users) calendar date — toISOString() would give the UTC date. */
+export const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 /** Page through a PostgREST call so results are never silently capped at 1000 rows. */
 async function fetchAll<T>(build: (from: number, to: number) => any, pageSize = 1000): Promise<T[]> {
@@ -154,11 +158,13 @@ export async function searchParties(type: string, term: string) {
 }
 
 // ── Reports ──────────────────────────────────────────────────
-export function useTrialBalance(from: string, to: string, hubId?: string | null) {
+/** excludeClosing: leave year-end closing vouchers out of the period columns (used by the P&L). */
+export function useTrialBalance(from: string, to: string, hubId?: string | null, excludeClosing = false) {
   return useQuery({
-    queryKey: ['acct', 'tb', from, to, hubId || 'all'],
+    queryKey: ['acct', 'tb', from, to, hubId || 'all', excludeClosing],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('acct_trial_balance', { p_from: from, p_to: to, p_hub: hubId || null });
+      const { data, error } = await supabase.rpc('acct_trial_balance',
+        { p_from: from, p_to: to, p_hub: hubId || null, p_exclude_closing: excludeClosing });
       if (error) throw error;
       return (data ?? []).map((r: any) => ({
         ...r, opening: +r.opening, period_debit: +r.period_debit, period_credit: +r.period_credit, closing: +r.closing,
@@ -291,6 +297,9 @@ export const useReverseVoucher = () => useAcctMutation(
   (v: { id: string; reason: string; date?: string }) =>
     rpc('acct_reverse_voucher', { p_id: v.id, p_reason: v.reason, p_date: v.date || null }),
   'Reversal posted');
+
+export const useCloseFiscalYear = () => useAcctMutation(
+  (id: string) => rpc('acct_close_fiscal_year', { p_fy: id }), 'Financial year closed');
 
 export function useSaveAccount() {
   return useAcctMutation(async (a: Partial<Account>) => {
