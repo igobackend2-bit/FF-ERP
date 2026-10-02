@@ -34,6 +34,8 @@ export interface CreateInvoiceParams {
   notes?: string | null;
   /** Due date offset in days (default 0 = same day) */
   dueDays?: number;
+  /** yyyy-MM-dd — the order's selected delivery/order date. Defaults to today. */
+  invoiceDate?: string | null;
 }
 
 /**
@@ -65,7 +67,7 @@ export async function createInvoiceForOrder(params: CreateInvoiceParams): Promis
     }
 
     const invoice_number = generateInvoiceNumber(params.orderId);
-    const invoice_date   = format(new Date(), 'yyyy-MM-dd');
+    const invoice_date   = params.invoiceDate || format(new Date(), 'yyyy-MM-dd');
     const due_date       = params.dueDays
       ? format(new Date(Date.now() + params.dueDays * 86_400_000), 'yyyy-MM-dd')
       : invoice_date;
@@ -113,7 +115,7 @@ export async function backfillMissingInvoices(): Promise<{ created: number; fail
   // Fetch orders — join customers table for name/phone/address
   const { data: orders } = await supabase
     .from('sales_orders')
-    .select('id, customer_id, customer_name, net_amount, total_amount, subtotal, payment_mode, notes, customer:customers(name, phone, address)')
+    .select('id, customer_id, customer_name, net_amount, total_amount, subtotal, payment_mode, notes, order_date, delivery_date, customer:customers(name, phone, address)')
     .order('created_at', { ascending: true });
 
   if (!orders?.length) return { created, failed };
@@ -170,6 +172,8 @@ export async function backfillMissingInvoices(): Promise<{ created: number; fail
       totalAmount:     total,
       paymentMode:     (order as any).payment_mode ?? 'cod',
       notes:           (order as any).notes,
+      // Backfilled invoices belong to the order's own date, not the day Sync was clicked.
+      invoiceDate:     (order as any).delivery_date ?? (order as any).order_date,
     });
     if (result) created++;
     else failed++;
