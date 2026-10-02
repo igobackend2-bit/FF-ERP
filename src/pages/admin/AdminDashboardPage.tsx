@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users, Banknote, Truck, Package, ShoppingCart, Boxes, Camera,
   RotateCcw, FileSearch, RefreshCw, ChevronRight, ClipboardList, Layers, MapPin,
-  Sunrise, PackageX, Wallet, Clock,
+  Sunrise, PackageX, Wallet, Clock, DatabaseBackup,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
@@ -12,6 +12,62 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuditLogs } from '@/hooks/useAuditLogs';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { BACKUP_AUDIT_ACTION } from '@/lib/dayBackup';
+
+// ── Daily backup status ───────────────────────────────────────────────────────
+// Reads the audit-log entry written by every Day Backup download. Turns red when the
+// last download is older than 24 hours (or there has never been one), so a missed day
+// is visible on the page the admin opens first.
+function BackupStatusCard() {
+  const navigate = useNavigate();
+  const { data: last, isLoading, error } = useQuery({
+    queryKey: ['admin-last-backup'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('audit_logs')
+        .select('performed_by_name, created_at, after_state')
+        .eq('action', BACKUP_AUDIT_ACTION)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return (data?.[0] ?? null) as { performed_by_name: string | null; created_at: string; after_state: any } | null;
+    },
+  });
+
+  const lastAt = last?.created_at ? new Date(last.created_at) : null;
+  const hoursAgo = lastAt ? (Date.now() - lastAt.getTime()) / 3_600_000 : null;
+  const overdue = hoursAgo === null || hoursAgo > 24;
+  const color = error ? '#6B7280' : overdue ? '#DC2626' : '#0E8A6B';
+
+  let message = 'Checking last backup…';
+  if (error) message = `Could not read backup history: ${(error as any)?.message ?? 'unknown error'}`;
+  else if (!isLoading && !lastAt) message = 'No backup has been downloaded yet';
+  else if (!isLoading && lastAt) {
+    const when = format(lastAt, 'd MMM yyyy, h:mm a');
+    message = overdue
+      ? `No backup in the last 24 hours — last one was ${when}`
+      : `Last backup: ${when}${last?.performed_by_name ? ` · ${last.performed_by_name}` : ''}`;
+  }
+
+  return (
+    <div
+      className="rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap"
+      style={{ background: '#FFFFFF', border: `1px solid ${overdue || error ? color + '55' : '#E5E7EB'}`, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+    >
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: color + '18' }}>
+        <DatabaseBackup className="w-[18px] h-[18px]" style={{ color }} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>Daily backup</div>
+        <div className="text-[12px] truncate" style={{ color: overdue || error ? color : '#6B7280' }}>{message}</div>
+      </div>
+      <Button size="sm" variant={overdue ? 'default' : 'outline'} className="gap-2 text-[12px]" onClick={() => navigate('/admin/day-backup')}>
+        <DatabaseBackup className="w-3.5 h-3.5" />
+        Download backup
+      </Button>
+    </div>
+  );
+}
 
 // ── KPI Card ───────────────────────────────────────────────────────────────────
 // Colored top accent + gradient icon badge per card, so a dense grid of 15
@@ -291,6 +347,9 @@ export function AdminDashboardPage() {
           Refresh
         </Button>
       </div>
+
+      {/* ── Daily backup status ──────────────────────────────────────────── */}
+      <BackupStatusCard />
 
       {/* ── KPI Cards ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">

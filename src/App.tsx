@@ -231,6 +231,7 @@ const AdminCriticalsAuditPage = lazy(() => import('@/pages/admin/AdminCriticalsA
 const WeekOffManagementPage = lazy(() => import('@/pages/admin/WeekOffManagementPage'));
 const FixVerticalsPage = lazyNamed(() => import('@/pages/admin/FixVerticalsPage'), 'FixVerticalsPage');
 const AdminCronJobsPage = lazy(() => import('@/pages/admin/AdminCronJobsPage'));
+const AdminDayBackupPage = lazy(() => import('@/pages/admin/AdminDayBackupPage'));
 const AdminShiftUserManagementPage = lazy(() => import('@/pages/admin/AdminShiftUserManagementPage'));
 const AdminShiftAttendancePage = lazy(() => import('@/pages/admin/AdminShiftAttendancePage'));
 const AdminNotificationTonesPage = lazy(() => import('@/pages/admin/AdminNotificationTonesPage'));
@@ -677,6 +678,7 @@ const AppRoutes = () => {
       <Route path="/admin/week-off-management" element={<ProtectedRoute allowedRoles={['admin', 'ceo', 'hr']}><WeekOffManagementPage /></ProtectedRoute>} />
       <Route path="/admin/sop-management" element={<ProtectedRoute allowedRoles={['admin', 'ceo']}><AdminSOPManagementPage /></ProtectedRoute>} />
       <Route path="/admin/crons" element={<ProtectedRoute allowedRoles={['admin']}><AdminCronJobsPage /></ProtectedRoute>} />
+      <Route path="/admin/day-backup" element={<ProtectedRoute allowedRoles={['admin']}><AdminDayBackupPage /></ProtectedRoute>} />
       <Route path="/admin/shift-users" element={<ProtectedRoute allowedRoles={['admin', 'ceo']}><AdminShiftUserManagementPage /></ProtectedRoute>} />
       <Route path="/admin/shift-attendance" element={<ProtectedRoute allowedRoles={['admin', 'ceo']}><AdminShiftAttendancePage /></ProtectedRoute>} />
       <Route path="/admin/lockouts" element={<ProtectedRoute allowedRoles={['admin']}><AdminLockoutManagementPage /></ProtectedRoute>} />

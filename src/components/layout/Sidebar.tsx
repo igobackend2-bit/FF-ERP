@@ -72,6 +72,7 @@ import {
   Boxes,
   Target,
   UserCog,
+  DatabaseBackup,
   MessageSquarePlus as Feedback,
   CheckCircle2,
   Calculator,
@@ -436,6 +437,7 @@ export const navigationConfig: NavGroup[] = [
     items: [
       { icon: LayoutDashboard, label: 'Dashboard',                 path: '/admin-dashboard' },
       { icon: UserCog,         label: 'User Management',           path: '/user-management' },
+      { icon: DatabaseBackup,  label: 'Day Backup',                path: '/admin/day-backup' },
       { icon: BarChart3,       label: 'FF Operations Overview',    path: '/ff-operations/gm-dashboard' },
       { icon: Sunrise,         label: 'Day Open / Close KPIs',      path: '/ff-operations/day-kpis' },
       { icon: ClipboardList,   label: 'Sales Orders',              path: '/sales/orders' },
