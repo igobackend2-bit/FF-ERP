@@ -310,6 +310,12 @@ export default function QCInspection() {
                   (Number(data.grade_b_kg) || 0) +
                   (Number(data.grade_c_kg) || 0) +
                   (Number(data.grade_d_kg) || 0);
+    // A 0 kg net weight used to pass the check below (0 = 0), saving an "accepted"
+    // GRN that added nothing to inventory — e.g. gross and tare both typed as the weight.
+    if (!(netWeight > 0)) {
+      toast.error(`Net weight is ${netWeight.toFixed(1)} kg — Tare (${Number(tare).toFixed(1)}) must be less than Gross (${Number(gross).toFixed(1)}). Nothing was saved.`);
+      return;
+    }
     if (Math.abs(total - netWeight) > 0.1) {
       toast.error(`Weight mismatch! Graded total (${total.toFixed(1)} kg) must match Net weight (${netWeight.toFixed(1)} kg)`);
       return;
