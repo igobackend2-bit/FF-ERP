@@ -161,7 +161,7 @@ export function useAcctSettings() {
 export async function searchParties(type: string, term: string) {
   const t = term.trim();
   if (type === 'customer') {
-    let q = supabase.from('customers').select('id, name, shop_name, phone').limit(20);
+    let q = supabase.from('customers').select('id, name, shop_name, phone').eq('is_active', true).limit(20);
     if (t) q = q.or(`name.ilike.%${t}%,shop_name.ilike.%${t}%,phone.ilike.%${t}%`);
     const { data, error } = await q;
     if (error) throw error;
