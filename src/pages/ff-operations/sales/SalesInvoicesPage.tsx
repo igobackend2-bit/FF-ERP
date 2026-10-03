@@ -10,6 +10,7 @@ import {
   ArrowLeft, Download, MessageCircle, Loader2,
   Package, ChevronRight, Building2, RefreshCw, Zap, Truck,
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { backfillMissingInvoices, fixZeroAmountInvoices, finalizeInvoice } from '@/lib/invoiceHelper';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
@@ -104,7 +105,7 @@ const COMPANY = {
 /* ═══════════════════════════════════════════════════════════════════════════════
    PRINT VIEW
    ═══════════════════════════════════════════════════════════════════════════════ */
-function InvoicePrintView({ invoice, onClose }: { invoice: Invoice; onClose: () => void }) {
+function InvoicePrintView({ invoice, onClose, readOnly = false }: { invoice: Invoice; onClose: () => void; readOnly?: boolean }) {
   const printRef = useRef<HTMLDivElement>(null);
   const qc       = useQueryClient();
 
@@ -156,7 +157,7 @@ function InvoicePrintView({ invoice, onClose }: { invoice: Invoice; onClose: () 
           <StatusBadge status={invoice.status} />
         </div>
         <div className="flex items-center gap-2">
-          {invoice.status === 'unpaid' && (
+          {!readOnly && invoice.status === 'unpaid' && (
             <button
               onClick={() => markPaid.mutate()}
               disabled={markPaid.isPending}
@@ -609,6 +610,9 @@ export default function SalesInvoicesPage() {
   const [payModeFor, setPayModeFor]     = useState<string | null>(null);
   const [generateFor, setGenerateFor]   = useState<Invoice | null>(null);
   const queryClient = useQueryClient();
+  // Accounts only view invoices and their status; creating, editing and payment changes belong to operations.
+  const { user } = useAuth();
+  const readOnly = user?.role === 'accounts';
 
   const { data: hubs = [] } = useQuery({
     queryKey: ['hubs-for-invoices'],
@@ -715,7 +719,7 @@ export default function SalesInvoicesPage() {
   if (needsSetup) return <SetupRequired />;
 
   if (selectedInvoice) {
-    return <InvoicePrintView invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} />;
+    return <InvoicePrintView invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} readOnly={readOnly} />;
   }
 
   return (
@@ -724,10 +728,10 @@ export default function SalesInvoicesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Invoices</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Auto-generated for every order</p>
+          <p className="text-sm text-slate-500 mt-0.5">{readOnly ? 'View only — invoice details and payment status' : 'Auto-generated for every order'}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          {!readOnly && <button
             onClick={handleSync}
             disabled={syncing}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100 disabled:opacity-50 transition-colors"
@@ -736,7 +740,7 @@ export default function SalesInvoicesPage() {
             {syncing
               ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Syncing…</>
               : <><Zap className="h-3.5 w-3.5" /> Sync Missing</>}
-          </button>
+          </button>}
           <span className="bg-amber-50 text-amber-700 font-bold px-3 py-1.5 rounded-lg border border-amber-200 text-xs">
             Unpaid ₹{totalUnpaid.toLocaleString('en-IN')}
           </span>
@@ -860,7 +864,7 @@ export default function SalesInvoicesPage() {
                 </div>
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                   {/* Draft → generate invoice */}
-                  {inv.status === 'draft' && (
+                  {!readOnly && inv.status === 'draft' && (
                     <button
                       onClick={() => setGenerateFor(inv)}
                       className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
@@ -870,7 +874,7 @@ export default function SalesInvoicesPage() {
                     </button>
                   )}
                   {/* Quick status actions (non-draft only) */}
-                  {inv.status !== 'paid' && inv.status !== 'draft' && (
+                  {!readOnly && inv.status !== 'paid' && inv.status !== 'draft' && (
                     <div className="relative">
                       <button
                         onClick={() => setPayModeFor(payModeFor === inv.id ? null : inv.id)}
@@ -899,7 +903,7 @@ export default function SalesInvoicesPage() {
                       )}
                     </div>
                   )}
-                  {inv.status === 'paid' && (
+                  {!readOnly && inv.status === 'paid' && (
                     <button
                       onClick={() => updateStatus.mutate({ id: inv.id, status: 'unpaid' })}
                       disabled={updateStatus.isPending}
@@ -910,7 +914,7 @@ export default function SalesInvoicesPage() {
                     </button>
                   )}
                   {/* Render modal */}
-                  {generateFor?.id === inv.id && (
+                  {!readOnly && generateFor?.id === inv.id && (
                     <GenerateInvoiceModal
                       invoice={generateFor}
                       onClose={() => setGenerateFor(null)}
