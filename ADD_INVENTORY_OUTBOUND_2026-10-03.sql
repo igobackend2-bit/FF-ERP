@@ -11,6 +11,8 @@
 --                                   a collection entry for the order (cash_collections insert)
 --                                   its invoice becoming 'paid'
 --                                   the order status becoming 'delivered'
+--   inventory_log checks          its two allowed-value lists are EXTENDED with 'qc_receive' / 'sale' and
+--                                 'qc_inspection' / 'sales_order' (section 0); nothing already allowed is removed
 --   increment_inventory()         QC receipts now write the movement ledger too (see section 5)
 --   inventory_movement_summary()  opening / received / sold / wastage / closing for a date range
 --
@@ -32,6 +34,20 @@
 -- STATUS: NOT YET APPLIED. Run in the Supabase SQL Editor (project qwiumswrbddwmlraktvy).
 -- Then run CHECK_INVENTORY_OUTBOUND_PREVIEW_2026-10-03.sql, and only when happy, ENABLE_... .
 -- Idempotent: safe to run twice.
+
+-- 0. Allow the new ledger values ------------------------------------------------------------------------
+-- inventory_log has two CHECK lists. The first version of this script was rejected by them (error 23514,
+-- inventory_log_event_type_check) because it wrote the event names 'qc_receive' and 'sale' and the
+-- reference types 'qc_inspection' and 'sales_order'. Both lists are EXTENDED, never shrunk: every value
+-- that was allowed before still is. Re-running is harmless.
+ALTER TABLE public.inventory_log DROP CONSTRAINT IF EXISTS inventory_log_event_type_check;
+ALTER TABLE public.inventory_log ADD CONSTRAINT inventory_log_event_type_check
+  CHECK (event_type = ANY (ARRAY['receive', 'dispatch', 'wastage', 'qc_reject', 'return', 'adjustment',
+                                 'qc_receive', 'sale']));
+ALTER TABLE public.inventory_log DROP CONSTRAINT IF EXISTS inventory_log_ref_type_check;
+ALTER TABLE public.inventory_log ADD CONSTRAINT inventory_log_ref_type_check
+  CHECK (ref_type IS NULL OR ref_type = ANY (ARRAY['box', 'pack', 'order', 'adjustment', 'wastage', 'manual',
+                                                   'qc_inspection', 'sales_order']));
 
 -- 1. Settings ----------------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.inventory_outbound_settings (
