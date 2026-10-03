@@ -232,6 +232,7 @@ const WeekOffManagementPage = lazy(() => import('@/pages/admin/WeekOffManagement
 const FixVerticalsPage = lazyNamed(() => import('@/pages/admin/FixVerticalsPage'), 'FixVerticalsPage');
 const AdminCronJobsPage = lazy(() => import('@/pages/admin/AdminCronJobsPage'));
 const AdminDayBackupPage = lazy(() => import('@/pages/admin/AdminDayBackupPage'));
+const AdminWebsiteCustomersPage = lazy(() => import('@/pages/admin/AdminWebsiteCustomersPage'));
 const OverviewPage = lazy(() => import('@/pages/overview/OverviewPage'));
 const AdminShiftUserManagementPage = lazy(() => import('@/pages/admin/AdminShiftUserManagementPage'));
 const AdminShiftAttendancePage = lazy(() => import('@/pages/admin/AdminShiftAttendancePage'));
@@ -335,6 +336,7 @@ const ShiftHistoryPage = lazy(() => import('@/pages/shift/ShiftHistoryPage'));
 const ManagementIntelligenceDashboard = lazy(() => import('@/pages/shift/ManagementIntelligenceDashboard'));
 const VendorPortalPage = lazy(() => import('@/pages/public/VendorPortalPage'));
 const AbsentLockedPage = lazy(() => import('@/pages/public/AbsentLockedPage'));
+const NoAccessPage = lazy(() => import('@/pages/NoAccessPage'));
 const SandboxPage = lazy(() => import('@/pages/SandboxPage'));
 const PorterPaymentPage = lazyNamed(() => import('@/pages/employee/PorterPaymentPage'), 'PorterPaymentPage');
 const TransportPaymentPage = lazyNamed(() => import('@/pages/employee/TransportPaymentPage'), 'TransportPaymentPage');
@@ -460,6 +462,11 @@ const ProtectedRoute = ({
     return <Navigate to="/login" replace />;
   }
 
+  // Customer sign-ups (role user/customer) are not ERP staff: /no-access is the only page they may see.
+  if (user.role?.toLowerCase() === 'customer' && location.pathname !== '/no-access') {
+    return <Navigate to="/no-access" replace />;
+  }
+
   // ATTENDANCE LOCK: Only applies to 'employee' role.
   // All other roles (admin, ceo, gm, hr, rsh, director, smo, gmo, boi, accounts, etc.)
   // are NEVER blocked by attendance — they always have full access.
@@ -546,6 +553,7 @@ const AppRoutes = () => {
       {/* PUBLIC ROUTES - No Authentication Required */}
       <Route path="/vendor/track/:accessToken" element={<VendorPortalPage />} />
       <Route path="/absent-locked" element={<AbsentLockedPage />} />
+      <Route path="/no-access" element={<ProtectedRoute><NoAccessPage /></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/redirect" replace />} />
       <Route path="/login" element={<LoginPage />} />
@@ -680,6 +688,7 @@ const AppRoutes = () => {
       <Route path="/admin/sop-management" element={<ProtectedRoute allowedRoles={['admin', 'ceo']}><AdminSOPManagementPage /></ProtectedRoute>} />
       <Route path="/admin/crons" element={<ProtectedRoute allowedRoles={['admin']}><AdminCronJobsPage /></ProtectedRoute>} />
       <Route path="/admin/day-backup" element={<ProtectedRoute allowedRoles={['admin']}><AdminDayBackupPage /></ProtectedRoute>} />
+      <Route path="/admin/website-customers" element={<ProtectedRoute allowedRoles={['admin', 'ceo', 'ff_operations_manager']}><AdminWebsiteCustomersPage /></ProtectedRoute>} />
       <Route path="/admin/shift-users" element={<ProtectedRoute allowedRoles={['admin', 'ceo']}><AdminShiftUserManagementPage /></ProtectedRoute>} />
       <Route path="/admin/shift-attendance" element={<ProtectedRoute allowedRoles={['admin', 'ceo']}><AdminShiftAttendancePage /></ProtectedRoute>} />
       <Route path="/admin/lockouts" element={<ProtectedRoute allowedRoles={['admin']}><AdminLockoutManagementPage /></ProtectedRoute>} />

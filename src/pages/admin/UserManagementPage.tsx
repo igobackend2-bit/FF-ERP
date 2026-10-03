@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { ROLES, DEPARTMENTS } from '@/constants/departments';
 import { format } from 'date-fns';
 import { exportToCSV } from '@/lib/exportUtils';
@@ -93,6 +94,8 @@ export function UserManagementPage() {
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  // Customer sign-ups (mobile OTP portal / shop) also land in profiles with role 'user'. They are not
+  // staff: they are kept out of this list and have their own page (/admin/website-customers).
 
   // Fetch all active users (soft delete filter)
   const { data: users, isLoading } = useQuery({
@@ -690,8 +693,13 @@ Bob Wilson,bob.wilson@example.com,,Admin,Admin,EMP003`;
     return colors[role] || colors.Employee;
   };
 
+  const isCustomerAccount = (u: Profile) => ['user', 'customer'].includes((u.role || '').toLowerCase());
+  const customerCount = users?.filter(isCustomerAccount).length || 0;
+  const poolCount = (users?.length || 0) - customerCount;
+
   // Filter users by search and department
   const filteredUsers = users?.filter(user => {
+    if (isCustomerAccount(user)) return false;
     const query = searchQuery.toLowerCase();
     const matchesSearch = (
       (user.name?.toLowerCase().includes(query) || false) ||
@@ -1076,7 +1084,7 @@ Bob Wilson,bob.wilson@example.com,,Admin,Admin,EMP003`;
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Users className="w-5 h-5" />
-                  All Users ({filteredUsers.length}{filteredUsers.length !== (users?.length || 0) ? ` of ${users?.length}` : ''})
+                  Staff Users ({filteredUsers.length}{filteredUsers.length !== poolCount ? ` of ${poolCount}` : ''})
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   <Button
@@ -1119,6 +1127,11 @@ Bob Wilson,bob.wilson@example.com,,Admin,Admin,EMP003`;
                       ))}
                     </SelectContent>
                   </Select>
+                  <Button asChild variant="outline" className="whitespace-nowrap">
+                    <Link to="/admin/website-customers" title="Customers who signed up on the website or customer portal are listed on their own page">
+                      Website customers ({customerCount}) →
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </CardHeader>
