@@ -1,15 +1,29 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { Search, Package, AlertTriangle, RefreshCw, Building2, TrendingDown, TrendingUp, Layers } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+
+interface QcPhotoInspection {
+  id: string;
+  hub_id: string;
+  product_id: string;
+  grn_number: string | null;
+  created_at: string;
+  overall_grade: string | null;
+  gross_weight_kg: number | null;
+  tare_weight_kg: number | null;
+  photo_urls: string[];
+}
 
 export default function InventoryDashboard() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [hubFilter, setHubFilter] = useState((user as any)?.hub_id ? (user as any).hub_id : '');
+  const [viewing, setViewing] = useState<{ name: string; hub: string; inspections: QcPhotoInspection[] } | null>(null);
 
   const { data: hubs = [] } = useQuery({
     queryKey: ['hubs'],
@@ -42,6 +56,38 @@ export default function InventoryDashboard() {
     },
     refetchInterval: 30000,
   });
+
+  // Photos the hub manager attached while inspecting each delivery (qc_inspections.photo_urls),
+  // newest first, grouped by hub + product so each stock row can show its latest QC evidence.
+  const { data: qcPhotoRows = [], isError: qcPhotosError } = useQuery({
+    queryKey: ['inventory-qc-photos', hubFilter],
+    queryFn: async () => {
+      let query = supabase
+        .from('qc_inspections')
+        .select('id, hub_id, product_id, grn_number, created_at, overall_grade, gross_weight_kg, tare_weight_kg, photo_urls')
+        .not('photo_urls', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (hubFilter) query = query.eq('hub_id', hubFilter);
+      const { data, error } = await query;
+      if (error) {
+        console.error('[InventoryDashboard] QC photos query failed:', error.message);
+        throw error;
+      }
+      return ((data ?? []) as unknown as QcPhotoInspection[]).filter(r => Array.isArray(r.photo_urls) && r.photo_urls.length > 0);
+    },
+    refetchInterval: 30000,
+  });
+
+  const photosByStock = useMemo(() => {
+    const map = new Map<string, QcPhotoInspection[]>();
+    for (const r of qcPhotoRows) {
+      const key = `${r.hub_id}:${r.product_id}`;
+      const list = map.get(key);
+      if (list) list.push(r); else map.set(key, [r]);
+    }
+    return map;
+  }, [qcPhotoRows]);
 
   const filtered = (inventory as any[]).filter(item =>
     !search || item.product?.name?.toLowerCase().includes(search.toLowerCase())
@@ -131,6 +177,7 @@ export default function InventoryDashboard() {
                 <th className="w-12">#</th>
                 <th>Product Information</th>
                 <th>Hub / Location</th>
+                <th>QC Photos</th>
                 <th className="text-right">Current Stock</th>
                 <th className="text-right">Min Level</th>
                 <th className="text-center">Health</th>
@@ -140,7 +187,7 @@ export default function InventoryDashboard() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center gap-2">
                       <RefreshCw className="h-6 w-6 animate-spin text-[#2C64E3]" />
                       <span>Loading inventory assets...</span>
@@ -149,7 +196,7 @@ export default function InventoryDashboard() {
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <Package className="h-12 w-12 mx-auto mb-3 text-slate-200" />
                     <p>No inventory records matching your criteria.</p>
                   </td>
@@ -175,6 +222,36 @@ export default function InventoryDashboard() {
                           <Building2 className="h-3.5 w-3.5 text-slate-400" />
                           <span className="text-sm">{item.hub?.display_name || item.hub?.name}</span>
                         </div>
+                      </td>
+                      <td>
+                        {(() => {
+                          const inspections = photosByStock.get(`${item.hub_id}:${item.product_id}`) ?? [];
+                          const allPhotos = inspections.flatMap(r => r.photo_urls);
+                          if (allPhotos.length === 0) return <span className="text-slate-300 text-xs">—</span>;
+                          return (
+                            <button
+                              type="button"
+                              title="View QC photos"
+                              onClick={() => setViewing({
+                                name: item.product?.name ?? 'Product',
+                                hub: item.hub?.display_name || item.hub?.name || '',
+                                inspections,
+                              })}
+                              className="group flex items-center gap-1"
+                            >
+                              {allPhotos.slice(0, 3).map(url => (
+                                <img
+                                  key={url} src={url} alt="" loading="lazy"
+                                  onError={e => { e.currentTarget.style.visibility = 'hidden'; }}
+                                  className="h-9 w-9 rounded-md object-cover border border-slate-200 group-hover:border-blue-400 transition-colors"
+                                />
+                              ))}
+                              {allPhotos.length > 3 && (
+                                <span className="ml-1 text-[11px] font-semibold text-slate-500">+{allPhotos.length - 3}</span>
+                              )}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="text-right">
                         <div className="flex flex-col items-end">
@@ -226,6 +303,43 @@ export default function InventoryDashboard() {
           </table>
         </div>
       </div>
+
+      {qcPhotosError && (
+        <p className="text-xs text-red-600 px-1">QC photos could not be loaded right now. Stock levels above are unaffected.</p>
+      )}
+
+      <Dialog open={!!viewing} onOpenChange={open => { if (!open) setViewing(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>QC photos — {viewing?.name}</DialogTitle>
+            <DialogDescription>
+              {viewing?.hub} · newest inspection first. Click a photo to open it full size.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5">
+            {viewing?.inspections.map(r => (
+              <div key={r.id} className="space-y-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-800">{r.grn_number ?? 'No GRN'}</span>
+                  <span>{format(new Date(r.created_at), 'dd MMM yyyy, hh:mm a')}</span>
+                  {r.overall_grade && <span>Grade {r.overall_grade}</span>}
+                  <span>Net {(Number(r.gross_weight_kg ?? 0) - Number(r.tare_weight_kg ?? 0)).toLocaleString()} kg</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {r.photo_urls.map(url => (
+                    <a key={url} href={url} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={url} alt={`QC photo ${r.grn_number ?? ''}`} loading="lazy"
+                        className="w-full aspect-square object-cover rounded-lg border border-slate-200"
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex items-center justify-between text-slate-400 px-1">
         <p className="text-[11px] italic">* Estimated value calculated based on Grade A wholesale pricing.</p>

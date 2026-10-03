@@ -197,23 +197,32 @@ export default function QCInspection() {
     setPhotoPreviewUrls(updated.map(f => URL.createObjectURL(f)));
   };
 
-  // Upload photos to Supabase Storage
+  // Upload photos to Supabase Storage. Throws on any failure: this used to swallow the error,
+  // and because the qc-photos bucket did not exist every inspection was saved with no photos
+  // while the hub manager believed they had been uploaded.
   const uploadPhotos = async (): Promise<string[]> => {
     if (!photos.length) return [];
     setUploadingPhotos(true);
-    const urls: string[] = [];
-    for (const file of photos) {
-      const path = `qc-photos/${hubId ?? 'hub'}/${Date.now()}-${file.name}`;
-      const { data, error } = await supabase.storage
-        .from('qc-photos')
-        .upload(path, file, { upsert: true });
-      if (!error && data) {
+    try {
+      const urls: string[] = [];
+      for (const file of photos) {
+        const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_');
+        const path = `${hubId ?? 'hub'}/${Date.now()}-${safeName}`;
+        const { data, error } = await supabase.storage
+          .from('qc-photos')
+          .upload(path, file, { upsert: false });
+        if (error || !data) {
+          console.error('[QCInspection] photo upload failed:', error);
+          throw new Error(`Photo upload failed (${file.name}): ${error?.message ?? 'no response'}. Nothing was saved — try again, or remove the photos to continue without them.`);
+        }
         const { data: pub } = supabase.storage.from('qc-photos').getPublicUrl(data.path);
-        if (pub?.publicUrl) urls.push(pub.publicUrl);
+        if (!pub?.publicUrl) throw new Error(`Photo upload failed (${file.name}): no link was returned.`);
+        urls.push(pub.publicUrl);
       }
+      return urls;
+    } finally {
+      setUploadingPhotos(false);
     }
-    setUploadingPhotos(false);
-    return urls;
   };
 
   // Generate sequential GRN via DB function
@@ -225,8 +234,9 @@ export default function QCInspection() {
 
   const createQC = useMutation({
     mutationFn: async (data: QCFormData) => {
-      const grnNumber  = await generateGRN();
+      // Photos first: if an upload fails nothing is saved and no GRN number is used up.
       const photoUrls  = await uploadPhotos();
+      const grnNumber  = await generateGRN();
 
       const checklistJson: Record<string, boolean> = {};
       CHECKLIST_ITEMS.forEach(i => { checklistJson[i.key] = checklist[i.key] ?? false; });
@@ -369,6 +379,19 @@ export default function QCInspection() {
               </div>
             ))}
           </div>
+
+          {lastResult.photo_urls?.length > 0 && (
+            <div className="mb-6 text-left">
+              <p className="text-xs text-gray-500 mb-2">Photos saved ({lastResult.photo_urls.length})</p>
+              <div className="flex flex-wrap gap-2">
+                {lastResult.photo_urls.map((u: string) => (
+                  <a key={u} href={u} target="_blank" rel="noopener noreferrer">
+                    <img src={u} alt="QC photo" className="h-16 w-16 rounded-lg object-cover border border-white" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           {lastResult.grade_d_kg > 0 && (
             <div className="rounded-lg bg-red-100 p-3 text-sm text-red-700 mb-4">
