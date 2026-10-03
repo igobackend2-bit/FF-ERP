@@ -87,6 +87,8 @@ export default function QCInspection() {
   const [photos, setPhotos]                      = useState<File[]>([]);
   const [photoPreviewUrls, setPhotoPreviewUrls]  = useState<string[]>([]);
   const [uploadingPhotos, setUploadingPhotos]    = useState(false);
+  const [photoMissing, setPhotoMissing]          = useState(false);
+  const photoSectionRef = useRef<HTMLDivElement>(null);
   const [showChecklist, setShowChecklist]        = useState(true);
   const [showWebcam, setShowWebcam]              = useState(false);
 
@@ -182,6 +184,7 @@ export default function QCInspection() {
   const addPhotos = (files: File[]) => {
     const newPhotos = [...photos, ...files].slice(0, 5); // max 5
     setPhotos(newPhotos);
+    if (newPhotos.length > 0) setPhotoMissing(false);
     const urls = newPhotos.map(f => URL.createObjectURL(f));
     setPhotoPreviewUrls(urls);
   };
@@ -213,7 +216,7 @@ export default function QCInspection() {
           .upload(path, file, { upsert: false });
         if (error || !data) {
           console.error('[QCInspection] photo upload failed:', error);
-          throw new Error(`Photo upload failed (${file.name}): ${error?.message ?? 'no response'}. Nothing was saved — try again, or remove the photos to continue without them.`);
+          throw new Error(`Photo upload failed (${file.name}): ${error?.message ?? 'no response'}. Nothing was saved — check the connection and try again.`);
         }
         const { data: pub } = supabase.storage.from('qc-photos').getPublicUrl(data.path);
         if (!pub?.publicUrl) throw new Error(`Photo upload failed (${file.name}): no link was returned.`);
@@ -323,6 +326,13 @@ export default function QCInspection() {
   });
 
   const onSubmit = (data: QCFormData) => {
+    // A photo of the batch is compulsory: it is the evidence the Inventory page shows for this stock.
+    if (photos.length === 0) {
+      setPhotoMissing(true);
+      photoSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      toast.error('Photo is compulsory — add at least one photo of the batch before saving.');
+      return;
+    }
     const total = (Number(data.grade_a_kg) || 0) +
                   (Number(data.grade_b_kg) || 0) +
                   (Number(data.grade_c_kg) || 0) +
@@ -348,6 +358,7 @@ export default function QCInspection() {
     setChecklist({});
     setPhotos([]);
     setPhotoPreviewUrls([]);
+    setPhotoMissing(false);
   };
 
   // ── RESULT SCREEN ─────────────────────────────────────────
@@ -689,11 +700,14 @@ export default function QCInspection() {
         )}
 
         {/* Photo Capture */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+        <div
+          ref={photoSectionRef}
+          className={`bg-white rounded-xl border p-5 space-y-3 ${photoMissing ? 'border-red-400 ring-2 ring-red-100' : 'border-gray-200'}`}
+        >
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-800 text-sm uppercase tracking-wide flex items-center gap-2">
-              <Camera className="h-4 w-4" /> Batch Photos
-              <span className="text-xs text-gray-400 font-normal normal-case">({photos.length}/5)</span>
+              <Camera className="h-4 w-4" /> Batch Photos <span className="text-red-500">*</span>
+              <span className="text-xs text-gray-400 font-normal normal-case">({photos.length}/5 · at least 1 required)</span>
             </h3>
             {photos.length < 5 && (
               <button
@@ -729,10 +743,14 @@ export default function QCInspection() {
             <button
               type="button"
               onClick={openPhotoCapture}
-              className="w-full border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-gray-300 transition-colors"
+              className={`w-full border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
+                photoMissing ? 'border-red-300 bg-red-50 hover:border-red-400' : 'border-gray-200 hover:border-gray-300'
+              }`}
             >
-              <Camera className="h-8 w-8 text-gray-300 mx-auto mb-1" />
-              <p className="text-sm text-gray-400">Tap to capture or upload photos</p>
+              <Camera className={`h-8 w-8 mx-auto mb-1 ${photoMissing ? 'text-red-300' : 'text-gray-300'}`} />
+              <p className={`text-sm ${photoMissing ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                {photoMissing ? 'A photo is required to save — tap to capture or upload' : 'Tap to capture or upload photos'}
+              </p>
             </button>
           ) : (
             <div className="flex gap-2 flex-wrap">
@@ -762,6 +780,9 @@ export default function QCInspection() {
             ? <><RefreshCw className="h-4 w-4 animate-spin" /> {uploadingPhotos ? 'Uploading photos…' : 'Saving…'}</>
             : '✓ Submit QC Inspection'}
         </button>
+        {photos.length === 0 && (
+          <p className="text-center text-xs text-gray-500 -mt-2">Add at least one batch photo to submit.</p>
+        )}
       </form>
     </div>
   );
