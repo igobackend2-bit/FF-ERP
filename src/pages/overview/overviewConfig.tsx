@@ -33,6 +33,9 @@ export interface ListConfig {
   statusGroups?: { value: string; label: string; like: string }[];   // e.g. every 'pending_*' stage in one pick
   defaultDays?: number;          // default window (days back from today); omit = no date filter
   columns: Column[];
+  // Optional strip above the table, computed over ALL rows matching the filters (not just the page)
+  totalsSelect?: string;
+  totals?: { label: string; compute: (rows: any[]) => string }[];
 }
 
 export const inr = (n: any) =>
@@ -184,7 +187,13 @@ export const LISTS: Record<Exclude<TabKey, 'summary'>, ListConfig> = {
   },
   'stock': {
     key: 'stock', title: 'Stock now', table: 'inventory',
-    select: 'id, product_name, unit, quantity, min_threshold, updated_at, hubs(name), products(name, unit)',
+    select: 'id, product_name, unit, quantity, min_threshold, updated_at, hubs(name), products(name, unit, price)',
+    totalsSelect: 'quantity, min_threshold, products(price)',
+    totals: [
+      { label: 'Stock value (at selling price)', compute: rows => inr(rows.reduce((s, r) => s + Number(r.quantity || 0) * Number(r.products?.price || 0), 0)) },
+      { label: 'Stock lines', compute: rows => rows.length.toLocaleString('en-IN') },
+      { label: 'At or below minimum', compute: rows => rows.filter(r => r.min_threshold != null && Number(r.quantity || 0) <= Number(r.min_threshold)).length.toLocaleString('en-IN') },
+    ],
     order: [{ column: 'quantity', ascending: true }],
     hubColumn: 'hub_id',
     searchColumns: ['product_name'], searchHint: 'Product name',
@@ -197,6 +206,10 @@ export const LISTS: Record<Exclude<TabKey, 'summary'>, ListConfig> = {
           return <span className={low ? 'text-red-600 font-semibold' : ''}>{Number(r.quantity || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })} {r.products?.unit || r.unit || ''}</span>;
         } },
       { key: 'min', label: 'Minimum', align: 'right', value: r => (r.min_threshold == null ? null : Number(r.min_threshold)) },
+      { key: 'rate', label: 'Selling price', align: 'right', value: r => Number(r.products?.price || 0), render: r => inr(r.products?.price) },
+      { key: 'value', label: 'Stock value', align: 'right',
+        value: r => Math.round(Number(r.quantity || 0) * Number(r.products?.price || 0) * 100) / 100,
+        render: r => <span className="font-semibold">{inr(Number(r.quantity || 0) * Number(r.products?.price || 0))}</span> },
       { key: 'updated', label: 'Last updated', value: r => r.updated_at, render: r => dayTime(r.updated_at) },
     ],
   },

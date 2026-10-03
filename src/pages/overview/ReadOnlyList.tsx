@@ -15,8 +15,8 @@ const EXPORT_CAP = 20000;
 const today = () => format(new Date(), 'yyyy-MM-dd');
 
 // Same filters for the on-screen page and the CSV export
-function buildQuery(cfg: ListConfig, f: { from: string; to: string; hub: string; status: string; search: string }, withCount: boolean) {
-  let q = supabase.from(cfg.table).select(cfg.select, withCount ? { count: 'exact' } : undefined);
+function buildQuery(cfg: ListConfig, f: { from: string; to: string; hub: string; status: string; search: string }, withCount: boolean, selectOverride?: string) {
+  let q = supabase.from(cfg.table).select(selectOverride ?? cfg.select, withCount ? { count: 'exact' } : undefined);
   if (cfg.dateColumn && f.from) {
     q = cfg.dateType === 'ts' ? q.gte(cfg.dateColumn, `${f.from}T00:00:00+05:30`) : q.gte(cfg.dateColumn, f.from);
   }
@@ -60,6 +60,17 @@ export default function ReadOnlyList({ cfg, hubs }: { cfg: ListConfig; hubs: { i
       return { rows: data ?? [], count: count ?? 0 };
     },
     placeholderData: keepPreviousData,
+  });
+
+  // Totals strip (e.g. stock value) over every row that matches the filters, not just this page
+  const { data: totalRows } = useQuery({
+    queryKey: ['overview-totals', cfg.key, from, to, hub, status, search],
+    enabled: !!cfg.totals,
+    queryFn: async () => {
+      const { data, error } = await buildQuery(cfg, filters, false, cfg.totalsSelect).limit(1000);
+      if (error) throw error;
+      return data ?? [];
+    },
   });
 
   const rows = data?.rows ?? [];
@@ -141,6 +152,17 @@ export default function ReadOnlyList({ cfg, hubs }: { cfg: ListConfig; hubs: { i
           {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Export CSV
         </button>
       </div>
+
+      {cfg.totals && totalRows && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {cfg.totals.map(t => (
+            <div key={t.label} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t.label}</div>
+              <div className="mt-1 text-xl font-bold text-slate-800 tabular-nums">{t.compute(totalRows)}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         <div className="overflow-x-auto">
