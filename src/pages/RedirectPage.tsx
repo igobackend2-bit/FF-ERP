@@ -68,6 +68,12 @@ export function RedirectPage() {
       };
 
       const normalizedRole = role.toLowerCase();
+
+      // Customer sign-ups are not ERP staff - send them to the dead-end page, never to a dashboard
+      if (normalizedRole === 'customer') {
+        navigate('/no-access', { replace: true });
+        return;
+      }
       let destination = roleRoutes[normalizedRole] || '/day-start';
 
       // Skip Supabase queries for demo users (no real DB record)

@@ -93,6 +93,9 @@ export function UserManagementPage() {
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  // Customer sign-ups (mobile OTP portal / shop) also land in profiles with role 'user'. They are not
+  // staff, so they are hidden here unless explicitly shown.
+  const [showCustomers, setShowCustomers] = useState(false);
 
   // Fetch all active users (soft delete filter)
   const { data: users, isLoading } = useQuery({
@@ -690,8 +693,13 @@ Bob Wilson,bob.wilson@example.com,,Admin,Admin,EMP003`;
     return colors[role] || colors.Employee;
   };
 
+  const isCustomerAccount = (u: Profile) => ['user', 'customer'].includes((u.role || '').toLowerCase());
+  const customerCount = users?.filter(isCustomerAccount).length || 0;
+  const poolCount = showCustomers ? (users?.length || 0) : (users?.length || 0) - customerCount;
+
   // Filter users by search and department
   const filteredUsers = users?.filter(user => {
+    if (!showCustomers && isCustomerAccount(user)) return false;
     const query = searchQuery.toLowerCase();
     const matchesSearch = (
       (user.name?.toLowerCase().includes(query) || false) ||
@@ -1076,7 +1084,7 @@ Bob Wilson,bob.wilson@example.com,,Admin,Admin,EMP003`;
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Users className="w-5 h-5" />
-                  All Users ({filteredUsers.length}{filteredUsers.length !== (users?.length || 0) ? ` of ${users?.length}` : ''})
+                  {showCustomers ? 'All Accounts' : 'Staff Users'} ({filteredUsers.length}{filteredUsers.length !== poolCount ? ` of ${poolCount}` : ''})
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   <Button
@@ -1119,6 +1127,14 @@ Bob Wilson,bob.wilson@example.com,,Admin,Admin,EMP003`;
                       ))}
                     </SelectContent>
                   </Select>
+                  <Button
+                    variant={showCustomers ? 'secondary' : 'outline'}
+                    className="whitespace-nowrap"
+                    onClick={() => setShowCustomers(v => !v)}
+                    title="Customer sign-ups come from the mobile-OTP customer portal and the shop. They are not staff."
+                  >
+                    {showCustomers ? 'Hide' : 'Show'} customer sign-ups ({customerCount})
+                  </Button>
                 </div>
               </div>
             </CardHeader>

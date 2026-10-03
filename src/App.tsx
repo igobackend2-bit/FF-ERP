@@ -335,6 +335,7 @@ const ShiftHistoryPage = lazy(() => import('@/pages/shift/ShiftHistoryPage'));
 const ManagementIntelligenceDashboard = lazy(() => import('@/pages/shift/ManagementIntelligenceDashboard'));
 const VendorPortalPage = lazy(() => import('@/pages/public/VendorPortalPage'));
 const AbsentLockedPage = lazy(() => import('@/pages/public/AbsentLockedPage'));
+const NoAccessPage = lazy(() => import('@/pages/NoAccessPage'));
 const SandboxPage = lazy(() => import('@/pages/SandboxPage'));
 const PorterPaymentPage = lazyNamed(() => import('@/pages/employee/PorterPaymentPage'), 'PorterPaymentPage');
 const TransportPaymentPage = lazyNamed(() => import('@/pages/employee/TransportPaymentPage'), 'TransportPaymentPage');
@@ -460,6 +461,11 @@ const ProtectedRoute = ({
     return <Navigate to="/login" replace />;
   }
 
+  // Customer sign-ups (role user/customer) are not ERP staff: /no-access is the only page they may see.
+  if (user.role?.toLowerCase() === 'customer' && location.pathname !== '/no-access') {
+    return <Navigate to="/no-access" replace />;
+  }
+
   // ATTENDANCE LOCK: Only applies to 'employee' role.
   // All other roles (admin, ceo, gm, hr, rsh, director, smo, gmo, boi, accounts, etc.)
   // are NEVER blocked by attendance — they always have full access.
@@ -546,6 +552,7 @@ const AppRoutes = () => {
       {/* PUBLIC ROUTES - No Authentication Required */}
       <Route path="/vendor/track/:accessToken" element={<VendorPortalPage />} />
       <Route path="/absent-locked" element={<AbsentLockedPage />} />
+      <Route path="/no-access" element={<ProtectedRoute><NoAccessPage /></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/redirect" replace />} />
       <Route path="/login" element={<LoginPage />} />

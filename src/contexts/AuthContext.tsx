@@ -29,6 +29,10 @@ const mapRole = (dbRole: string): UserRole => {
     'accounts':                  'accounts',
     // View-only management login (no edit/approve/delete anywhere)
     'overview':                  'overview',
+    // Customer sign-ups (mobile-OTP portal / shop) land in profiles with role 'user'. They are NOT
+    // staff: mapping them to 'employee' (the unknown-role default) would hand them ERP screens.
+    'user':                      'customer',
+    'customer':                  'customer',
     'gm':                        'gm',
     'smo':                       'smo',
     'gmo':                       'gmo',

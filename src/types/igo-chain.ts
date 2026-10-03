@@ -8,6 +8,7 @@ export type UserRole =
   | 'ceo'
   | 'accounts'
   | 'overview'
+  | 'customer'
   | 'smo'
   | 'gm'
   | 'gmo'
@@ -81,6 +82,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   l1_manager:                'L1 Manager',
   bde:                       'BDE',
   overview:                  'Management Overview',
+  customer:                  'Customer',
   collection_executive:      'Collection Executive',
 };
 
