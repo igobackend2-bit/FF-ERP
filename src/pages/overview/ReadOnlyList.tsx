@@ -24,7 +24,10 @@ function buildQuery(cfg: ListConfig, f: { from: string; to: string; hub: string;
     q = cfg.dateType === 'ts' ? q.lte(cfg.dateColumn, `${f.to}T23:59:59.999+05:30`) : q.lte(cfg.dateColumn, f.to);
   }
   if (cfg.hubColumn && f.hub) q = q.eq(cfg.hubColumn, f.hub);
-  if (cfg.statusColumn && f.status) q = q.eq(cfg.statusColumn, f.status);
+  if (cfg.statusColumn && f.status) {
+    const group = cfg.statusGroups?.find(g => g.value === f.status);
+    q = group ? q.like(cfg.statusColumn, group.like) : q.eq(cfg.statusColumn, f.status);
+  }
   const term = f.search.trim().replace(/[,()%]/g, ' ');
   if (term && cfg.searchColumns?.length) {
     q = q.or(cfg.searchColumns.map(c => `${c}.ilike.%${term}%`).join(','));
@@ -119,6 +122,7 @@ export default function ReadOnlyList({ cfg, hubs }: { cfg: ListConfig; hubs: { i
           <label className="text-xs text-slate-500">Status
             <select value={status} onChange={e => resetPage(setStatus)(e.target.value)} className={`${inputCls} block mt-1 min-w-[150px]`}>
               <option value="">All</option>
+              {cfg.statusGroups?.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
               {cfg.statusOptions.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
             </select>
           </label>

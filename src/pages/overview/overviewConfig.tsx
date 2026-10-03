@@ -30,6 +30,7 @@ export interface ListConfig {
   searchHint?: string;
   statusColumn?: string;
   statusOptions?: string[];
+  statusGroups?: { value: string; label: string; like: string }[];   // e.g. every 'pending_*' stage in one pick
   defaultDays?: number;          // default window (days back from today); omit = no date filter
   columns: Column[];
 }
@@ -125,9 +126,10 @@ export const LISTS: Record<Exclude<TabKey, 'summary'>, ListConfig> = {
     key: 'vendor-payments', title: 'Vendor Payments', table: 'ff_vendor_payments',
     select: 'id, created_at, payment_status, gross_amount, deduction_amount, net_amount, utr_number, paid_at, is_bulk, vendors(name), hubs(name), purchase_orders(po_number)',
     order: [{ column: 'created_at', ascending: false }],
-    dateColumn: 'created_at', dateType: 'ts', hubColumn: 'hub_id', defaultDays: 13,
+    dateColumn: 'created_at', dateType: 'ts', hubColumn: 'hub_id',   // no default date window: raised payments must always be visible
     searchColumns: ['utr_number'], searchHint: 'UTR number',
     statusColumn: 'payment_status',
+    statusGroups: [{ value: '__pending__', label: 'All pending (raised, not yet paid)', like: 'pending%' }],
     statusOptions: ['pending_ff_ops', 'pending_gm', 'pending_l1', 'pending_auditor', 'pending_ceo', 'pending_admin', 'pending_accounts', 'approved', 'paid', 'rejected'],
     columns: [
       { key: 'created', label: 'Raised', value: r => r.created_at, render: r => dayTime(r.created_at) },
@@ -146,9 +148,10 @@ export const LISTS: Record<Exclude<TabKey, 'summary'>, ListConfig> = {
     key: 'transport-payments', title: 'Transport Payments', table: 'ff_transport_payments',
     select: 'id, trip_date, payment_status, vehicle_number, origin, destination, km_covered, total_amount, utr_number, paid_at, hubs(name)',
     order: [{ column: 'trip_date', ascending: false }, { column: 'created_at', ascending: false }],
-    dateColumn: 'trip_date', dateType: 'date', hubColumn: 'hub_id', defaultDays: 13,
+    dateColumn: 'trip_date', dateType: 'date', hubColumn: 'hub_id',
     searchColumns: ['vehicle_number', 'utr_number'], searchHint: 'Vehicle or UTR',
     statusColumn: 'payment_status',
+    statusGroups: [{ value: '__pending__', label: 'All pending (raised, not yet paid)', like: 'pending%' }],
     statusOptions: ['pending_ff_ops', 'pending_gm', 'pending_l1', 'pending_auditor', 'pending_ceo', 'pending_admin', 'pending_accounts', 'approved', 'paid', 'rejected'],
     columns: [
       { key: 'trip', label: 'Trip date', value: r => r.trip_date, render: r => day(r.trip_date) },
