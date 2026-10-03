@@ -36,7 +36,7 @@ export function LoginPage() {
       } catch { reachable = false; }
 
       if (!reachable) {
-        toast.error('Connection blocked. Try switching to mobile hotspot or change DNS to 8.8.8.8', { duration: 6000 });
+        toast.error('Still unable to reach the server. Please try again shortly or contact support.', { duration: 6000 });
       } else {
         toast.success('Connection is working! Try signing in again.');
         setHasNetworkError(false);
@@ -94,7 +94,7 @@ export function LoginPage() {
       if (msg.includes('invalid login credentials')) {
         toast.error('Invalid email or password');
       } else if (msg.includes('fetch') || msg.includes('network')) {
-        toast.error('Network error. Connection to server is unavailable.');
+        toast.error('Unable to reach the server. Please try again in a moment.');
         setHasNetworkError(true);
       } else {
         toast.error(authError.message);
@@ -277,9 +277,11 @@ export function LoginPage() {
                 <div className="p-4 rounded-xl" style={{ background: '#fff5f5', border: '1px solid #fecaca' }}>
                   <div className="flex items-center gap-2 mb-1.5">
                     <WifiOff className="w-4 h-4 text-red-500 shrink-0" />
-                    <p className="text-sm text-red-700 font-semibold">Connection issue detected</p>
+                    <p className="text-sm text-red-700 font-semibold">Can&apos;t reach the server</p>
                   </div>
-                  <p className="text-xs text-red-500 mb-3">Try switching to mobile hotspot or change DNS to 8.8.8.8</p>
+                  <p className="text-xs text-red-500 mb-3">
+                    This is usually temporary on our end. Please retry, and contact support if it keeps happening.
+                  </p>
                   <button
                     type="button"
                     onClick={handleNetworkCheck}
@@ -288,7 +290,7 @@ export function LoginPage() {
                     style={{ background: '#fee2e2', color: '#dc2626' }}
                   >
                     {isCheckingNetwork ? <Loader2 className="w-3 h-3 animate-spin inline mr-1" /> : null}
-                    Diagnose Connection
+                    Retry Connection
                   </button>
                 </div>
               )}
