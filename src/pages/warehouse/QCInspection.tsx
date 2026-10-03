@@ -278,13 +278,20 @@ export default function QCInspection() {
 
       // Update inventory
       if (gradeA + gradeB + gradeC > 0) {
-        const { error: invErr } = await supabase.rpc('increment_inventory', {
+        const stockArgs = {
           p_hub_id:     hubId,
           p_product_id: data.product_id,
           p_grade_a:    data.grade_a_kg,
           p_grade_b:    data.grade_b_kg,
           p_grade_c:    data.grade_c_kg,
-        });
+        };
+        // The inspection id lets the stock ledger link this receipt to its GRN. If the database has not
+        // been updated yet (PGRST202 = function with that signature not found) retry the original call so
+        // QC never breaks during the rollout.
+        let { error: invErr } = await (supabase as any).rpc('increment_inventory', { ...stockArgs, p_inspection_id: inspection.id });
+        if (invErr?.code === 'PGRST202') {
+          ({ error: invErr } = await (supabase as any).rpc('increment_inventory', stockArgs));
+        }
         if (invErr) throw new Error(`Inventory update failed: ${invErr.message}`);
       }
 
