@@ -34,9 +34,10 @@ function Summary() {
         supabase.from('purchase_orders').select('id', { count: 'exact', head: true }).in('status', ['pending', 'assigned', 'purchasing', 'purchased']),
         supabase.from('cash_collections').select('collected_amount, amount').eq('collection_date', todayStr).limit(1000),
         supabase.from('ff_vendor_payments').select('net_amount').like('payment_status', 'pending%').limit(1000),
-        supabase.from('inventory').select('quantity, min_threshold, products(price)').limit(1000),
+        supabase.from('inventory').select('quantity, min_threshold, avg_cost').limit(1000),
       ]);
-      for (const r of [orders, openPOs, coll, pay, stock]) if (r.error) throw r.error;
+      // Stock is optional here: if the cost columns are not installed yet the other cards must still load
+      for (const r of [orders, openPOs, coll, pay]) if (r.error) throw r.error;
 
       const live = (orders.data ?? []).filter(o => o.status !== 'cancelled');
       return {
@@ -47,8 +48,10 @@ function Summary() {
         collectedCount: (coll.data ?? []).length,
         payPending: (pay.data ?? []).length,
         payPendingValue: (pay.data ?? []).reduce((s, p) => s + Number(p.net_amount || 0), 0),
-        stockValue: (stock.data ?? []).reduce((s, i) => s + Number(i.quantity || 0) * Number(i.products?.price || 0), 0),
+        stockOk: !stock.error,
+        stockValue: (stock.data ?? []).reduce((s, i) => s + (Number(i.avg_cost) > 0 ? Number(i.quantity || 0) * Number(i.avg_cost) : 0), 0),
         stockLines: (stock.data ?? []).length,
+        stockNoCost: (stock.data ?? []).filter(i => Number(i.quantity || 0) > 0 && !(Number(i.avg_cost) > 0)).length,
         lowStock: (stock.data ?? []).filter(i => i.min_threshold != null && Number(i.quantity || 0) <= Number(i.min_threshold)).length,
       };
     },
@@ -70,7 +73,8 @@ function Summary() {
         <Kpi to="/overview/vendor-payments" icon={Banknote} tone="bg-purple-100 text-purple-700"
           label="Vendor payments pending" value={data.payPending} sub={`${inr(data.payPendingValue)} waiting in the approval chain`} />
         <Kpi to="/overview/stock" icon={PackageSearch} tone="bg-teal-100 text-teal-700"
-          label="Stock value today" value={inr(data.stockValue)} sub={`${data.stockLines} stock lines, at current selling price`} />
+          label="Stock value today (at purchase cost)" value={data.stockOk ? inr(data.stockValue) : '—'}
+          sub={data.stockOk ? `${data.stockLines} stock lines${data.stockNoCost ? ` · ${data.stockNoCost} with no cost yet, not included` : ''}` : 'Cost data is not set up yet'} />
         <Kpi to="/overview/stock" icon={PackageSearch} tone="bg-red-100 text-red-700"
           label="Stock lines at or below minimum" value={data.lowStock} sub="across all hubs" />
       </div>
