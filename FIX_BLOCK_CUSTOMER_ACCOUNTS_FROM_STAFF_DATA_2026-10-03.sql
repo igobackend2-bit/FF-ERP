@@ -19,10 +19,9 @@
 --   Evidence it is safe: every order in the last 30 days (643 website orders) was created by a
 --   staff field-executive login; customer accounts have 0 orders of their own.
 --
--- NOT CHANGED (flagged for a separate decision): customers, sales_orders, sales_order_items are
---   readable by anyone holding the public anon key (policies "customers_anon_read",
---   "sales_orders_select_all" are `true`). That may be deliberate for guest checkout, so it is
---   left alone here.
+-- UPDATE 2026-10-03 (later): the anonymous read/insert holes on customers, sales_orders and
+--   sales_order_items are closed by FIX_CLOSE_PUBLIC_DATA_LEAK_2026-10-03.sql, and those three tables
+--   are no longer on this file's keep-list.
 --
 -- Safe to run: additive, idempotent, one transaction, stops cleanly if a table is busy >10 s
 -- (just run again). KILL SWITCH at the bottom removes it in one statement.
@@ -39,7 +38,7 @@ declare
     'Account', 'Session', 'User', 'VerificationToken', 'verification_tokens', 'sessions', 'accounts',
     'account_deletion_requests', 'addresses', 'customer_addresses', 'user_addresses',
     'customer_notifications', 'customer_profiles', 'customer_queries', 'customer_wishlists',
-    'customers', 'cart', 'cart_items', 'carts', 'wishlist', 'wishlist_items', 'wishlists',
+    'leads', 'cart', 'cart_items', 'carts', 'wishlist', 'wishlist_items', 'wishlists',   -- 'leads' added: customers submit the lead form
     'orders', 'order_items', 'order_tracking', 'order_cancellations', 'order_returns', 'refunds',
     'reviews', 'product_reviews', 'product_images', 'products', 'categories', 'product_categories',
     'coupons', 'coupon_usage', 'subscriptions', 'subscription_items', 'banners', 'app_banners',
@@ -47,7 +46,7 @@ declare
     'contact_enquiries', 'feedback', 'stock_notifications', 'stock_alerts', 'push_tokens',
     'device_tokens', 'notifications', 'notification_settings', 'analytics_events', 'farm_stories',
     'farm_streams', 'market_rates', 'delivery_slots', 'delivery_zones', 'hub_pincodes', 'hubs',
-    'sales_orders', 'sales_order_items', 'announcements', 'user_location_logs', 'audit_logs',
+    'announcements', 'user_location_logs', 'audit_logs',   -- customers / sales_orders / sales_order_items now BLOCKED (see FIX_CLOSE_PUBLIC_DATA_LEAK)
     'profiles', 'cafe_ads', 'cafe_master_menu', 'cafe_menu_items', 'cafe_orders',
     'cafe_order_items', 'cafe_settings'
   ];
