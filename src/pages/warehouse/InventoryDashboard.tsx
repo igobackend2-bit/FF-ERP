@@ -2,9 +2,24 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { format } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
 import { Search, Package, AlertTriangle, RefreshCw, Building2, TrendingDown, TrendingUp, Layers } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+
+interface MovementRow {
+  hub_id: string;
+  product_id: string;
+  hub_name: string | null;
+  product_name: string | null;
+  opening: number;
+  received: number;
+  sold: number;
+  wastage: number;
+  other: number;
+  closing: number;
+}
+
+const fmtKg = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
 interface QcPhotoInspection {
   id: string;
@@ -24,6 +39,11 @@ export default function InventoryDashboard() {
   const [search, setSearch] = useState('');
   const [hubFilter, setHubFilter] = useState((user as any)?.hub_id ? (user as any).hub_id : '');
   const [viewing, setViewing] = useState<{ name: string; hub: string; inspections: QcPhotoInspection[] } | null>(null);
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const [view, setView] = useState<'stock' | 'movement'>('stock');
+  const [moveFrom, setMoveFrom] = useState(today);
+  const [moveTo, setMoveTo] = useState(today);
+  const [showIdle, setShowIdle] = useState(false);
 
   const { data: hubs = [] } = useQuery({
     queryKey: ['hubs'],
@@ -89,6 +109,78 @@ export default function InventoryDashboard() {
     return map;
   }, [qcPhotoRows]);
 
+  // Daily movement: opening / received / sold / wastage / closing for a date range, worked out in the
+  // database from the stock ledger (inventory_log) so it is exact and not capped at 1000 rows.
+  const rangeValid = !!moveFrom && !!moveTo && moveFrom <= moveTo;
+  const { data: movement = [], isLoading: movementLoading, error: movementError } = useQuery({
+    queryKey: ['inventory-movement', hubFilter, moveFrom, moveTo],
+    enabled: view === 'movement' && rangeValid,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc('inventory_movement_summary', {
+        p_from: moveFrom, p_to: moveTo, p_hub: hubFilter || null,
+      });
+      if (error) {
+        console.error('[InventoryDashboard] movement summary failed:', error.message);
+        throw error;
+      }
+      return ((data ?? []) as any[]).map(r => ({
+        ...r,
+        opening: Number(r.opening), received: Number(r.received), sold: Number(r.sold),
+        wastage: Number(r.wastage), other: Number(r.other), closing: Number(r.closing),
+      })) as MovementRow[];
+    },
+    retry: false,
+  });
+
+  // Whether sales are currently taking stock out (inventory_outbound_settings).
+  const { data: outbound, error: outboundError } = useQuery({
+    queryKey: ['inventory-outbound-settings'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('inventory_outbound_settings').select('enabled, start_date').maybeSingle();
+      if (error) throw error;
+      return data as { enabled: boolean; start_date: string } | null;
+    },
+    retry: false,
+    staleTime: 60000,
+  });
+  const outboundMissing = ['PGRST205', '42P01'].includes((outboundError as any)?.code);
+
+  // Sale lines in the period that could not be matched to a product in stock (so were not deducted).
+  const { data: unmatchedLines = 0 } = useQuery({
+    queryKey: ['inventory-unmatched-lines', moveFrom, moveTo],
+    enabled: view === 'movement' && rangeValid && !!outbound,
+    queryFn: async () => {
+      const startIso = new Date(`${moveFrom}T00:00:00+05:30`).toISOString();
+      const endIso = new Date(`${format(addDays(parseISO(moveTo), 1), 'yyyy-MM-dd')}T00:00:00+05:30`).toISOString();
+      const { data, error } = await (supabase as any)
+        .from('inventory_order_deductions').select('unmatched')
+        .is('skipped_reason', null).gte('deducted_at', startIso).lt('deducted_at', endIso).limit(1000);
+      if (error) {
+        console.error('[InventoryDashboard] unmatched lines query failed:', error.message);
+        throw error;
+      }
+      return (data ?? []).reduce((s: number, r: any) => s + (Array.isArray(r.unmatched) ? r.unmatched.length : 0), 0);
+    },
+    retry: false,
+  });
+
+  const movementRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (movement as MovementRow[]).filter(r =>
+      (!q || (r.product_name ?? '').toLowerCase().includes(q)) &&
+      (showIdle || r.received !== 0 || r.sold !== 0 || r.wastage !== 0 || r.other !== 0));
+  }, [movement, search, showIdle]);
+  const movementTotals = useMemo(() => movementRows.reduce(
+    (t, r) => ({
+      opening: t.opening + r.opening, received: t.received + r.received, sold: t.sold + r.sold,
+      wastage: t.wastage + r.wastage, other: t.other + r.other, closing: t.closing + r.closing,
+    }),
+    { opening: 0, received: 0, sold: 0, wastage: 0, other: 0, closing: 0 },
+  ), [movementRows]);
+  const showOther = movementRows.some(r => r.other !== 0);
+  const movementMissingSql = (movementError as any)?.code === 'PGRST202';
+
   const filtered = (inventory as any[]).filter(item =>
     !search || item.product?.name?.toLowerCase().includes(search.toLowerCase())
   );
@@ -139,6 +231,64 @@ export default function InventoryDashboard() {
       </div>
 
       <div className="zoho-card !p-0 overflow-hidden border-slate-200 shadow-sm">
+        <div className="px-4 pt-4 flex flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-sm">
+            {([['stock', 'Stock now'], ['movement', 'Daily movement']] as const).map(([key, label]) => (
+              <button
+                key={key} type="button" onClick={() => setView(key)}
+                className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+                  view === key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {view === 'movement' && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <label htmlFor="move-from" className="text-slate-500">From</label>
+              <input
+                id="move-from" type="date" value={moveFrom} max={today}
+                onChange={e => setMoveFrom(e.target.value)}
+                className="px-2 py-1.5 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500/20 outline-none"
+              />
+              <label htmlFor="move-to" className="text-slate-500">To</label>
+              <input
+                id="move-to" type="date" value={moveTo} min={moveFrom} max={today}
+                onChange={e => setMoveTo(e.target.value)}
+                className="px-2 py-1.5 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500/20 outline-none"
+              />
+              <button
+                type="button" onClick={() => { setMoveFrom(today); setMoveTo(today); }}
+                className="px-2.5 py-1.5 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50"
+              >Today</button>
+              <button
+                type="button"
+                onClick={() => {
+                  const y = format(addDays(new Date(), -1), 'yyyy-MM-dd');
+                  setMoveFrom(y); setMoveTo(y);
+                }}
+                className="px-2.5 py-1.5 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50"
+              >Yesterday</button>
+              <label className="flex items-center gap-1.5 text-slate-600 ml-1 cursor-pointer">
+                <input type="checkbox" checked={showIdle} onChange={e => setShowIdle(e.target.checked)} />
+                Include products with no movement
+              </label>
+            </div>
+          )}
+
+          <p className={`sm:ml-auto text-xs font-medium ${
+            outbound?.enabled ? 'text-green-700' : outbound ? 'text-amber-700' : 'text-slate-400'
+          }`}>
+            {outbound?.enabled
+              ? `Sales deduction ON since ${format(parseISO(outbound.start_date), 'd MMM yyyy')}`
+              : outbound
+                ? 'Sales deduction is OFF — stock changes only from QC and wastage'
+                : outboundMissing ? 'Sales deduction not set up yet' : ''}
+          </p>
+        </div>
+
         <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row gap-3 items-center justify-between">
           <div className="relative w-full sm:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -170,6 +320,7 @@ export default function InventoryDashboard() {
           </div>
         </div>
 
+        {view === 'stock' ? (
         <div className="zoho-table-container border-none rounded-none">
           <table className="zoho-table">
             <thead>
@@ -302,7 +453,95 @@ export default function InventoryDashboard() {
             </tbody>
           </table>
         </div>
+        ) : (
+        <div className="zoho-table-container border-none rounded-none">
+          <table className="zoho-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Hub</th>
+                <th className="text-right">Opening</th>
+                <th className="text-right">Received (QC)</th>
+                <th className="text-right">Sold</th>
+                <th className="text-right">Wastage</th>
+                {showOther && <th className="text-right">Other</th>}
+                <th className="text-right">Closing</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!rangeValid ? (
+                <tr><td colSpan={showOther ? 8 : 7} className="py-12 text-center text-slate-400">Pick a From date that is on or before the To date.</td></tr>
+              ) : movementLoading ? (
+                <tr>
+                  <td colSpan={showOther ? 8 : 7} className="py-12 text-center text-slate-400">
+                    <div className="flex flex-col items-center gap-2">
+                      <RefreshCw className="h-6 w-6 animate-spin text-[#2C64E3]" />
+                      <span>Working out stock movement…</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : movementError ? (
+                <tr>
+                  <td colSpan={showOther ? 8 : 7} className="py-12 text-center text-red-600 text-sm">
+                    {movementMissingSql
+                      ? 'The daily movement view needs a one-time database update. Run ADD_INVENTORY_OUTBOUND_2026-10-03.sql in the Supabase SQL Editor.'
+                      : `Could not load stock movement: ${(movementError as any)?.message ?? 'unknown error'}`}
+                  </td>
+                </tr>
+              ) : movementRows.length === 0 ? (
+                <tr>
+                  <td colSpan={showOther ? 8 : 7} className="py-12 text-center text-slate-400">
+                    <Package className="h-12 w-12 mx-auto mb-3 text-slate-200" />
+                    <p>No stock movement in this period.</p>
+                    <p className="text-xs mt-1">Tick “Include products with no movement” to list every product.</p>
+                  </td>
+                </tr>
+              ) : (
+                <>
+                  {movementRows.map(r => (
+                    <tr key={`${r.hub_id}:${r.product_id}`} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="font-semibold text-slate-900">{r.product_name ?? 'Unknown product'}</td>
+                      <td>
+                        <div className="flex items-center gap-1.5 text-slate-600">
+                          <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                          <span className="text-sm">{r.hub_name}</span>
+                        </div>
+                      </td>
+                      <td className="text-right text-slate-600">{fmtKg(r.opening)}</td>
+                      <td className={`text-right font-medium ${r.received > 0 ? 'text-green-700' : 'text-slate-400'}`}>{r.received > 0 ? `+${fmtKg(r.received)}` : '—'}</td>
+                      <td className={`text-right font-medium ${r.sold > 0 ? 'text-red-600' : 'text-slate-400'}`}>{r.sold > 0 ? `−${fmtKg(r.sold)}` : '—'}</td>
+                      <td className={`text-right font-medium ${r.wastage > 0 ? 'text-amber-600' : 'text-slate-400'}`}>{r.wastage > 0 ? `−${fmtKg(r.wastage)}` : '—'}</td>
+                      {showOther && <td className="text-right text-slate-600">{r.other === 0 ? '—' : fmtKg(r.other)}</td>}
+                      <td className="text-right font-bold text-slate-900">{fmtKg(r.closing)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-50 font-semibold text-slate-800">
+                    <td colSpan={2}>Total ({movementRows.length} products)</td>
+                    <td className="text-right">{fmtKg(movementTotals.opening)}</td>
+                    <td className="text-right">{fmtKg(movementTotals.received)}</td>
+                    <td className="text-right">{fmtKg(movementTotals.sold)}</td>
+                    <td className="text-right">{fmtKg(movementTotals.wastage)}</td>
+                    {showOther && <td className="text-right">{fmtKg(movementTotals.other)}</td>}
+                    <td className="text-right">{fmtKg(movementTotals.closing)}</td>
+                  </tr>
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
+        )}
       </div>
+
+      {view === 'movement' && rangeValid && !movementError && (
+        <div className="text-xs text-slate-500 px-1 space-y-1">
+          <p>Opening and closing are worked back from the stock ledger. There was no recorded stock before QC inspections began on 2 Oct 2026.</p>
+          {unmatchedLines > 0 && (
+            <p className="text-amber-700">
+              {unmatchedLines} sale {unmatchedLines === 1 ? 'line' : 'lines'} in this period could not be matched to a product in stock, so {unmatchedLines === 1 ? 'it was' : 'they were'} not deducted.
+            </p>
+          )}
+        </div>
+      )}
 
       {qcPhotosError && (
         <p className="text-xs text-red-600 px-1">QC photos could not be loaded right now. Stock levels above are unaffected.</p>
