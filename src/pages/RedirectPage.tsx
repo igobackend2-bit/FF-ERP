@@ -30,6 +30,7 @@ export function RedirectPage() {
         admin:                     '/admin-dashboard',
         ceo:                       '/ceo-dashboard',
         accounts:                  '/accounts-execution',
+        overview:                  '/overview',
         gmo:                       '/dashboard/gmo',
         gm:                        '/gm/ff-payments',
         smo:                       '/dashboard/smo',
