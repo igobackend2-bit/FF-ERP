@@ -27,6 +27,8 @@ const mapRole = (dbRole: string): UserRole => {
     'admin':                     'admin',
     'ceo':                       'ceo',
     'accounts':                  'accounts',
+    // View-only management login (no edit/approve/delete anywhere)
+    'overview':                  'overview',
     'gm':                        'gm',
     'smo':                       'smo',
     'gmo':                       'gmo',

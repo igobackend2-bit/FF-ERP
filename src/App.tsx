@@ -232,6 +232,7 @@ const WeekOffManagementPage = lazy(() => import('@/pages/admin/WeekOffManagement
 const FixVerticalsPage = lazyNamed(() => import('@/pages/admin/FixVerticalsPage'), 'FixVerticalsPage');
 const AdminCronJobsPage = lazy(() => import('@/pages/admin/AdminCronJobsPage'));
 const AdminDayBackupPage = lazy(() => import('@/pages/admin/AdminDayBackupPage'));
+const OverviewPage = lazy(() => import('@/pages/overview/OverviewPage'));
 const AdminShiftUserManagementPage = lazy(() => import('@/pages/admin/AdminShiftUserManagementPage'));
 const AdminShiftAttendancePage = lazy(() => import('@/pages/admin/AdminShiftAttendancePage'));
 const AdminNotificationTonesPage = lazy(() => import('@/pages/admin/AdminNotificationTonesPage'));
@@ -908,16 +909,16 @@ const AppRoutes = () => {
       <Route path="/catalog/:id/edit" element={<ProtectedRoute allowedRoles={OPS_ROLES}><ProductFormPage /></ProtectedRoute>} />
 
       {/* Reports Module */}
-      <Route path="/reports" element={<ProtectedRoute allowedRoles={OPS_ROLES}><ReportsDashboard /></ProtectedRoute>} />
-      <Route path="/reports/pl" element={<ProtectedRoute allowedRoles={OPS_ROLES}><PLReport /></ProtectedRoute>} />
-      <Route path="/reports/balance-sheet" element={<ProtectedRoute allowedRoles={OPS_ROLES}><BalanceSheetReport /></ProtectedRoute>} />
+      <Route path="/reports" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'overview']}><ReportsDashboard /></ProtectedRoute>} />
+      <Route path="/reports/pl" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'overview']}><PLReport /></ProtectedRoute>} />
+      <Route path="/reports/balance-sheet" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'overview']}><BalanceSheetReport /></ProtectedRoute>} />
       <Route path="/reports/custom" element={<ProtectedRoute allowedRoles={OPS_ROLES}><CustomReportBuilder /></ProtectedRoute>} />
-      <Route path="/reports/purchase"    element={<ProtectedRoute allowedRoles={OPS_ROLES}><PurchaseReportPage /></ProtectedRoute>} />
-      <Route path="/reports/sales"       element={<ProtectedRoute allowedRoles={OPS_ROLES}><DailySalesReportPage /></ProtectedRoute>} />
-      <Route path="/reports/inventory"   element={<ProtectedRoute allowedRoles={OPS_ROLES}><InventoryReportPage /></ProtectedRoute>} />
-      <Route path="/reports/delivery"    element={<ProtectedRoute allowedRoles={OPS_ROLES}><DeliveryReportPage /></ProtectedRoute>} />
+      <Route path="/reports/purchase"    element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'overview']}><PurchaseReportPage /></ProtectedRoute>} />
+      <Route path="/reports/sales"       element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'overview']}><DailySalesReportPage /></ProtectedRoute>} />
+      <Route path="/reports/inventory"   element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'overview']}><InventoryReportPage /></ProtectedRoute>} />
+      <Route path="/reports/delivery"    element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'overview']}><DeliveryReportPage /></ProtectedRoute>} />
       <Route path="/reports/attendance"  element={<ProtectedRoute allowedRoles={OPS_ROLES}><AttendanceReportPage /></ProtectedRoute>} />
-      <Route path="/reports/collection"  element={<ProtectedRoute allowedRoles={OPS_ROLES}><CashCollectionReportPage /></ProtectedRoute>} />
+      <Route path="/reports/collection"  element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'overview']}><CashCollectionReportPage /></ProtectedRoute>} />
 
       {/* Hub Management */}
       <Route path="/admin/hubs" element={<ProtectedRoute allowedRoles={['admin', 'ceo', 'ff_operations_manager']}><HubManagementPage /></ProtectedRoute>} />
@@ -947,7 +948,10 @@ const AppRoutes = () => {
       <Route path="/ff/vendor-payment/new"    element={<ProtectedRoute allowedRoles={['purchase_manager','purchase_head','ff_operations_manager','admin']}><FFVendorPaymentForm /></ProtectedRoute>} />
       <Route path="/ff/transport-payment/new" element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','ff_operations_manager','admin']}><FFTransportPaymentForm /></ProtectedRoute>} />
       {/* Phase 5: FF Payments Report */}
-      <Route path="/reports/ff-payments" element={<ProtectedRoute allowedRoles={['admin','ceo','gm','l1_manager','auditor','ff_operations_manager','accounts']}><FFPaymentsReport /></ProtectedRoute>} />
+      <Route path="/reports/ff-payments" element={<ProtectedRoute allowedRoles={['admin','ceo','gm','l1_manager','auditor','ff_operations_manager','accounts','overview']}><FFPaymentsReport /></ProtectedRoute>} />
+      {/* Management Overview — view-only login (role 'overview'); admin may preview it.      Read-only by construction: the page only runs SELECTs. */}
+      <Route path="/overview" element={<ProtectedRoute allowedRoles={['overview', 'admin']}><OverviewPage /></ProtectedRoute>} />
+      <Route path="/overview/:tab" element={<ProtectedRoute allowedRoles={['overview', 'admin']}><OverviewPage /></ProtectedRoute>} />
       {/* GM FF payments (shared component, role-aware) */}
       <Route path="/gm/ff-payments"           element={<ProtectedRoute allowedRoles={['gm','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       <Route path="/gm/ff-transport-payments" element={<ProtectedRoute allowedRoles={['gm','admin']}><FFPaymentApprovals /></ProtectedRoute>} />

@@ -619,6 +619,40 @@ export const navigationConfig: NavGroup[] = [
     ],
   },
 
+  // ── Management Overview — view-only login (role 'overview'): lists + reports, nothing editable ──
+  {
+    title: 'Overview',
+    icon: LayoutDashboard,
+    roles: ['overview'],
+    items: [
+      { icon: LayoutDashboard, label: 'Summary',            path: '/overview' },
+      { icon: ClipboardList,   label: 'Sales Orders',       path: '/overview/sales-orders' },
+      { icon: ShoppingCart,    label: 'Purchase Orders',    path: '/overview/purchase-orders' },
+      { icon: Wallet,          label: 'Cash Collections',   path: '/overview/collections' },
+      { icon: Landmark,        label: 'Cash Closing',       path: '/overview/cash-closing' },
+      { icon: Banknote,        label: 'Vendor Payments',    path: '/overview/vendor-payments' },
+      { icon: Truck,           label: 'Transport Payments', path: '/overview/transport-payments' },
+      { icon: FileText,        label: 'Invoices',           path: '/overview/invoices' },
+      { icon: Boxes,           label: 'Stock now',          path: '/overview/stock' },
+    ],
+  },
+  {
+    title: 'Reports',
+    icon: FileBarChart,
+    roles: ['overview'],
+    items: [
+      { icon: FileBarChart, label: 'Reports Dashboard',   path: '/reports' },
+      { icon: BarChart3,    label: 'Daily Sales',         path: '/reports/sales' },
+      { icon: ShoppingCart, label: 'Purchase Report',     path: '/reports/purchase' },
+      { icon: Boxes,        label: 'Inventory Report',    path: '/reports/inventory' },
+      { icon: Truck,        label: 'Delivery Report',     path: '/reports/delivery' },
+      { icon: Wallet,       label: 'Cash Collection Report', path: '/reports/collection' },
+      { icon: Banknote,     label: 'FF Payments Report',  path: '/reports/ff-payments' },
+      { icon: PieChart,     label: 'P&L Report',          path: '/reports/pl' },
+      { icon: Wallet,       label: 'Balance Sheet',       path: '/reports/balance-sheet' },
+    ],
+  },
+
   // ── Asset Management — financial register + operational fleet compliance ──────
   {
     title: 'Asset Management',

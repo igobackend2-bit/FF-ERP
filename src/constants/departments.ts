@@ -60,6 +60,7 @@ export const ROLES = [
   { value: 'driver', label: 'Driver' },
   { value: 'back_office', label: 'Back Office' },
   { value: 'bde', label: 'BDE (Business Development Executive)' },
+  { value: 'overview', label: 'Management Overview (view only)' },
 ] as const;
 
 export type Department = typeof DEPARTMENTS[number]['value'];
