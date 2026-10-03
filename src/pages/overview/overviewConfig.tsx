@@ -45,6 +45,8 @@ const day = (d: any) => (d ? format(new Date(d), 'dd MMM yyyy') : '—');
 const dayTime = (d: any) => (d ? format(new Date(d), 'dd MMM yyyy, hh:mm a') : '—');
 const label = (s: any) => String(s ?? '—').replace(/_/g, ' ');
 
+const bothPriced = (r: any) => Number(r.avg_cost) > 0 && r.so_price != null;
+
 export const LISTS: Record<Exclude<TabKey, 'summary'>, ListConfig> = {
   'sales-orders': {
     key: 'sales-orders', title: 'Sales Orders', table: 'sales_orders',
@@ -186,32 +188,58 @@ export const LISTS: Record<Exclude<TabKey, 'summary'>, ListConfig> = {
     ],
   },
   'stock': {
-    key: 'stock', title: 'Stock now', table: 'inventory',
-    select: 'id, product_name, unit, quantity, min_threshold, updated_at, avg_cost, cost_source, hubs(name), products(name, unit)',
-    totalsSelect: 'quantity, min_threshold, avg_cost',
-    totals: [
-      { label: 'Stock value (at purchase cost)', compute: rows => inr(rows.reduce((s, r) => s + (Number(r.avg_cost) > 0 ? Number(r.quantity || 0) * Number(r.avg_cost) : 0), 0)) },
-      { label: 'Stock lines', compute: rows => rows.length.toLocaleString('en-IN') },
-      { label: 'Lines with no cost yet (not in the value)', compute: rows => { const no = rows.filter(r => Number(r.quantity || 0) > 0 && !(Number(r.avg_cost) > 0)); return `${no.length.toLocaleString('en-IN')} lines · ${no.reduce((s, r) => s + Number(r.quantity || 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 1 })} qty`; } },
-    ],
+    key: 'stock', title: 'Stock now', table: 'inventory_valuation_v',
+    select: 'id, product_name, unit, quantity, min_threshold, updated_at, avg_cost, cost_source, so_price, so_lines, so_window_days, hub_name, hub_id',
     order: [{ column: 'quantity', ascending: true }],
     hubColumn: 'hub_id',
     searchColumns: ['product_name'], searchHint: 'Product name',
+    // Totals over ALL matching rows. Expected sales / profit only count lines that have BOTH a
+    // buying cost and a selling price, so the profit compares like with like.
+    totalsSelect: 'quantity, avg_cost, so_price',
+    totals: [
+      { label: 'Stock value (at purchase cost)', compute: rows => inr(rows.reduce((s, r) => s + (Number(r.avg_cost) > 0 ? Number(r.quantity || 0) * Number(r.avg_cost) : 0), 0)) },
+      { label: 'Expected sales value (recent order prices)', compute: rows => inr(rows.filter(bothPriced).reduce((s, r) => s + Number(r.quantity || 0) * Number(r.so_price), 0)) },
+      { label: 'Expected profit', compute: rows => {
+          const both = rows.filter(bothPriced);
+          const profit = both.reduce((s, r) => s + Number(r.quantity || 0) * (Number(r.so_price) - Number(r.avg_cost)), 0);
+          const cost = both.reduce((s, r) => s + Number(r.quantity || 0) * Number(r.avg_cost), 0);
+          const below = both.filter(r => Number(r.so_price) < Number(r.avg_cost)).length;
+          return `${inr(profit)}${cost > 0 ? ` (${(profit / cost * 100).toFixed(1)}% on cost)` : ''}${below ? ` · ${below} below cost` : ''}`;
+        } },
+      { label: 'Lines missing a price', compute: rows => {
+          const live = rows.filter(r => Number(r.quantity || 0) > 0);
+          return `${live.filter(r => !(Number(r.avg_cost) > 0)).length} no cost · ${live.filter(r => r.so_price == null).length} no selling price`;
+        } },
+    ],
     columns: [
-      { key: 'product', label: 'Product', value: r => r.products?.name || r.product_name },
-      { key: 'hub', label: 'Hub', value: r => r.hubs?.name },
+      { key: 'product', label: 'Product', value: r => r.product_name },
+      { key: 'hub', label: 'Hub', value: r => r.hub_name },
       { key: 'qty', label: 'In stock', align: 'right', value: r => Number(r.quantity || 0),
         render: r => {
           const low = r.min_threshold != null && Number(r.quantity || 0) <= Number(r.min_threshold);
-          return <span className={low ? 'text-red-600 font-semibold' : ''}>{Number(r.quantity || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })} {r.products?.unit || r.unit || ''}</span>;
+          return <span className={low ? 'text-red-600 font-semibold' : ''}>{Number(r.quantity || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })} {r.unit || ''}</span>;
         } },
       { key: 'min', label: 'Minimum', align: 'right', value: r => (r.min_threshold == null ? null : Number(r.min_threshold)) },
       { key: 'cost', label: 'Buying cost (avg)', align: 'right',
         value: r => (Number(r.avg_cost) > 0 ? Number(r.avg_cost) : null),
         render: r => (Number(r.avg_cost) > 0 ? inr(r.avg_cost) : <span className="text-slate-400">not set</span>) },
+      { key: 'sell', label: 'Selling price (recent orders)', align: 'right',
+        value: r => (r.so_price == null ? null : Number(r.so_price)),
+        render: r => (r.so_price == null ? <span className="text-slate-400">no recent sales</span>
+          : <span title={`${r.so_lines} order lines, last ${r.so_window_days} days`}>{inr(r.so_price)}</span>) },
+      { key: 'margin', label: 'Margin', align: 'right',
+        value: r => (bothPriced(r) ? Math.round((Number(r.so_price) - Number(r.avg_cost)) / Number(r.so_price) * 1000) / 10 : null),
+        render: r => {
+          if (!bothPriced(r)) return <span className="text-slate-300">—</span>;
+          const m = (Number(r.so_price) - Number(r.avg_cost)) / Number(r.so_price) * 100;
+          return <span className={m < 0 ? 'text-red-600 font-semibold' : 'text-emerald-700'} title={m < 0 ? 'Selling price is below the buying cost' : undefined}>{m.toFixed(1)}%</span>;
+        } },
       { key: 'value', label: 'Stock value (at cost)', align: 'right',
         value: r => (Number(r.avg_cost) > 0 ? Math.round(Number(r.quantity || 0) * Number(r.avg_cost) * 100) / 100 : null),
         render: r => (Number(r.avg_cost) > 0 ? <span className="font-semibold">{inr(Number(r.quantity || 0) * Number(r.avg_cost))}</span> : <span className="text-slate-300">—</span>) },
+      { key: 'sales', label: 'Expected sales value', align: 'right',
+        value: r => (r.so_price == null ? null : Math.round(Number(r.quantity || 0) * Number(r.so_price) * 100) / 100),
+        render: r => (r.so_price == null ? <span className="text-slate-300">—</span> : inr(Number(r.quantity || 0) * Number(r.so_price))) },
       { key: 'updated', label: 'Last updated', value: r => r.updated_at, render: r => dayTime(r.updated_at) },
     ],
   },
