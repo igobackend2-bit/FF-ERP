@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { addDays, format, parseISO } from 'date-fns';
-import { Search, Package, AlertTriangle, RefreshCw, Building2, TrendingDown, TrendingUp, Layers } from 'lucide-react';
+import { Search, Package, AlertTriangle, RefreshCw, Building2, TrendingDown, TrendingUp, Layers, Pencil } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface MovementRow {
@@ -44,6 +45,9 @@ export default function InventoryDashboard() {
   const [moveFrom, setMoveFrom] = useState(today);
   const [moveTo, setMoveTo] = useState(today);
   const [showIdle, setShowIdle] = useState(false);
+  // Buying-cost correction (admin / FF ops manager / accounts only)
+  const canSetCost = ['admin', 'ff_operations_manager', 'accounts'].includes(((user as any)?.role ?? '').toLowerCase());
+  const [costEdit, setCostEdit] = useState<{ item: any; value: string; reason: string } | null>(null);
 
   const { data: hubs = [] } = useQuery({
     queryKey: ['hubs'],
@@ -188,7 +192,29 @@ export default function InventoryDashboard() {
   const totalItems = filtered.length;
   const lowStockCount = filtered.filter((i: any) => i.quantity < (i.min_threshold ?? 50)).length;
   const outOfStock = filtered.filter((i: any) => i.quantity === 0).length;
-  const totalValue = filtered.reduce((s: number, i: any) => s + (i.quantity * (i.product?.grade_a_price ?? 0)), 0);
+  // Value = quantity x what we PAID (moving-average purchase cost), not the selling price.
+  // Lines with no cost yet are left out of the total and counted, never valued at zero silently.
+  const totalValue = filtered.reduce((s: number, i: any) => s + (Number(i.avg_cost) > 0 ? i.quantity * Number(i.avg_cost) : 0), 0);
+  const uncostedCount = filtered.filter((i: any) => i.quantity > 0 && !(Number(i.avg_cost) > 0)).length;
+
+  const saveCost = useMutation({
+    mutationFn: async () => {
+      if (!costEdit) return;
+      const { error } = await (supabase as any).rpc('inv_set_unit_cost', {
+        p_hub: costEdit.item.hub_id, p_product: costEdit.item.product_id,
+        p_cost: Number(costEdit.value), p_reason: costEdit.reason,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Buying cost saved');
+      setCostEdit(null);
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+    },
+    onError: (e: any) => toast.error(e?.message?.includes('inv_set_unit_cost')
+      ? 'The cost functions are not installed yet - run ADD_INVENTORY_COST_2026-10-04.sql first.'
+      : (e?.message || 'Could not save the cost')),
+  });
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12 pt-4">
@@ -214,7 +240,7 @@ export default function InventoryDashboard() {
           { label: 'Total Items', value: totalItems, icon: Layers, color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Low Stock', value: lowStockCount, icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50' },
           { label: 'Out of Stock', value: outOfStock, icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
-          { label: 'Inventory Value', value: `₹${(totalValue / 1000).toFixed(1)}k`, icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-50' },
+          { label: 'Inventory Value (at purchase cost)', value: `₹${(totalValue / 1000).toFixed(1)}k`, note: uncostedCount > 0 ? `${uncostedCount} line${uncostedCount === 1 ? '' : 's'} without cost yet - not included` : undefined, icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-50' },
         ].map(card => (
           <div key={card.label} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
             <div className="px-6 pt-5 pb-4 flex-1 flex flex-col">
@@ -225,6 +251,7 @@ export default function InventoryDashboard() {
               </div>
               <p className="text-[13px] text-slate-500 font-medium mb-1">{card.label}</p>
               <p className="text-[24px] font-bold text-slate-800 tracking-tight">{card.value}</p>
+              {(card as any).note && <p className="text-[11px] text-amber-600 mt-0.5">{(card as any).note}</p>}
             </div>
           </div>
         ))}
@@ -330,6 +357,8 @@ export default function InventoryDashboard() {
                 <th>Hub / Location</th>
                 <th>QC Photos</th>
                 <th className="text-right">Current Stock</th>
+                <th className="text-right">Buying Cost</th>
+                <th className="text-right">Stock Value</th>
                 <th className="text-right">Min Level</th>
                 <th className="text-center">Health</th>
                 <th className="text-center">Status</th>
@@ -338,7 +367,7 @@ export default function InventoryDashboard() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center gap-2">
                       <RefreshCw className="h-6 w-6 animate-spin text-[#2C64E3]" />
                       <span>Loading inventory assets...</span>
@@ -347,7 +376,7 @@ export default function InventoryDashboard() {
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     <Package className="h-12 w-12 mx-auto mb-3 text-slate-200" />
                     <p>No inventory records matching your criteria.</p>
                   </td>
@@ -411,6 +440,33 @@ export default function InventoryDashboard() {
                           </span>
                           <span className="text-[10px] text-slate-400 uppercase font-medium">Kilograms</span>
                         </div>
+                      </td>
+                      <td className="text-right">
+                        {Number(item.avg_cost) > 0 ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span className="font-medium text-slate-800">₹{Number(item.avg_cost).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                            {canSetCost && (
+                              <button type="button" title="Correct buying cost" className="text-slate-300 hover:text-blue-600"
+                                onClick={() => setCostEdit({ item, value: String(Number(item.avg_cost)), reason: '' })}>
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span className="text-xs text-slate-400">not set</span>
+                            {canSetCost && (
+                              <button type="button" title="Set buying cost" className="text-slate-300 hover:text-blue-600"
+                                onClick={() => setCostEdit({ item, value: '', reason: '' })}>
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {item.cost_source && <div className="text-[10px] text-slate-400">{String(item.cost_source).replace(/_/g, ' ')}</div>}
+                      </td>
+                      <td className="text-right font-semibold text-slate-800">
+                        {Number(item.avg_cost) > 0 ? `₹${Math.round(item.quantity * Number(item.avg_cost)).toLocaleString('en-IN')}` : <span className="text-slate-300 font-normal">—</span>}
                       </td>
                       <td className="text-right text-slate-500 font-medium">
                         {item.min_threshold ?? 50}
@@ -580,8 +636,39 @@ export default function InventoryDashboard() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!costEdit} onOpenChange={open => { if (!open) setCostEdit(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Buying cost — {costEdit?.item?.product?.name}</DialogTitle>
+            <DialogDescription>
+              {costEdit?.item?.hub?.display_name || costEdit?.item?.hub?.name}. Enter what we paid per unit (₹). Stock value = stock × this cost.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="block text-xs text-slate-500">Cost per unit (₹)
+              <input type="number" min="0" step="0.01" value={costEdit?.value ?? ''}
+                onChange={e => setCostEdit(c => c && { ...c, value: e.target.value })}
+                className="mt-1 w-full h-9 rounded-lg border border-slate-200 px-3 text-sm" />
+            </label>
+            <label className="block text-xs text-slate-500">Reason (required)
+              <input value={costEdit?.reason ?? ''} placeholder="e.g. vendor bill rate, checked with purchase"
+                onChange={e => setCostEdit(c => c && { ...c, reason: e.target.value })}
+                className="mt-1 w-full h-9 rounded-lg border border-slate-200 px-3 text-sm" />
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setCostEdit(null)} className="h-9 px-3 rounded-lg border border-slate-200 text-sm">Cancel</button>
+              <button type="button" onClick={() => saveCost.mutate()}
+                disabled={saveCost.isPending || !(Number(costEdit?.value) > 0) || !(costEdit?.reason ?? '').trim()}
+                className="h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-50">
+                {saveCost.isPending ? 'Saving…' : 'Save cost'}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center justify-between text-slate-400 px-1">
-        <p className="text-[11px] italic">* Estimated value calculated based on Grade A wholesale pricing.</p>
+        <p className="text-[11px] italic">* Value = stock × average buying cost (taken from purchase orders at QC). Selling price is not used.</p>
         <p className="text-[11px] font-medium flex items-center gap-1">
           <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
           Live connection active

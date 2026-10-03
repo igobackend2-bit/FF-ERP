@@ -185,3 +185,15 @@ JSONB, `remarks`. INSERT policy must exist or logging silently disables (Feb 202
 - Empty on 2026-09-24: payments_received, payments_made, credit_notes, vendor_credits, wastage_entries,
   cash_collections, client_collections. A legacy table named `accounts` exists — unrelated to `acct_*`.
 - Accounts ledger objects all use the `acct_` prefix (ADD_ACCOUNTS_LEDGER_CORE.sql applied 2026-09-24).
+
+## Stock cost valuation  (Confirmed 2026-10-03 read-only; install = ADD_INVENTORY_COST_2026-10-04.sql)
+- `purchase_order_items.unit_price` is the buying rate; **every line has `unit = 'kg'`** (even for items
+  stocked in piece/bunch/litre), **no `product_id`** (0 of 78 stocked products link), names are free text
+  upper-case ("ONION", "TOMATO NAVEEN") and link to the PO via **`po_id`** (not `purchase_order_id`).
+  Typo outliers exist (tomato 450-600/kg) - anchor to 1/4x..4x of `products.price` before using a rate.
+- `products.grade_a_price` is a flat 45.00 on every product - never use it for valuation.
+- QC vendor equals the PO vendor in only 2 of 97 inspections: match PO lines by product name, not vendor.
+- `profiles.role` is plain text with no CHECK constraint; `is_staff()` = any active profile.
+- After install: `inventory.avg_cost/cost_source/cost_updated_at`, `inventory_log.unit_cost`,
+  `qc_inspections.unit_cost/unit_cost_source`; `inv__move` has an optional 9th arg `p_unit_cost`
+  (receipts update the moving average; sales/wastage/adjustments leave it unchanged).
